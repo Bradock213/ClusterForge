@@ -1,0 +1,56 @@
+name: Build ClusterForge Windows
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  windows-x64:
+    runs-on: windows-2025
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Reconstruct source archive
+        shell: pwsh
+        run: |
+          $parts = Get-ChildItem build-input/source.part*.txt | Sort-Object Name
+          if (-not $parts) { throw 'No source archive parts found.' }
+          $base64 = ($parts | ForEach-Object { Get-Content $_.FullName -Raw }) -join ''
+          [IO.File]::WriteAllBytes('ClusterForge_Phase1_Source.zip', [Convert]::FromBase64String($base64))
+          Expand-Archive ClusterForge_Phase1_Source.zip -DestinationPath extracted -Force
+          if (-not (Test-Path 'extracted/ClusterForge_Phase1/CMakeLists.txt')) { throw 'Source extraction failed.' }
+
+      - name: Build native Windows x64 binaries
+        shell: pwsh
+        working-directory: extracted/ClusterForge_Phase1
+        run: |
+          $env:VCPKG_ROOT = 'C:\vcpkg'
+          & "$env:VCPKG_ROOT\vcpkg.exe" install --triplet x64-windows-static --x-manifest-root="$PWD"
+          if ($LASTEXITCODE -ne 0) { throw 'vcpkg install failed.' }
+          cmake -S . -B build/windows-ci -G "Visual Studio 17 2022" -A x64 `
+            -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake `
+            -DVCPKG_TARGET_TRIPLET=x64-windows-static `
+            -DCLUSTERFORGE_BUILD_TESTS=ON
+          if ($LASTEXITCODE -ne 0) { throw 'CMake configure failed.' }
+          cmake --build build/windows-ci --config Release --parallel
+          if ($LASTEXITCODE -ne 0) { throw 'Windows build failed.' }
+          ctest --test-dir build/windows-ci -C Release --output-on-failure
+          if ($LASTEXITCODE -ne 0) { throw 'Windows tests failed.' }
+
+      - name: Package Windows release
+        shell: pwsh
+        working-directory: extracted/ClusterForge_Phase1
+        run: |
+          New-Item -ItemType Directory -Force release/windows-x64/bin | Out-Null
+          Copy-Item build/windows-ci/bin/Release/*.exe release/windows-x64/bin/
+          Copy-Item web,config,scripts -Destination release/windows-x64 -Recurse
+          Copy-Item README.md,QUICK_START.txt,TEST_REPORT.md,LICENSE -Destination release/windows-x64
+          Get-FileHash release/windows-x64/bin/*.exe -Algorithm SHA256 | Format-Table -AutoSize | Out-File release/windows-x64/SHA256.txt
+          Compress-Archive -Path release/windows-x64/* -DestinationPath ClusterForge-windows-x64.zip -Force
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ClusterForge-windows-x64
+          path: extracted/ClusterForge_Phase1/ClusterForge-windows-x64.zip
+          retention-days: 7
