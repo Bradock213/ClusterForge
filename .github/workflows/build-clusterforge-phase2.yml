@@ -20,6 +20,8 @@ jobs:
           [IO.File]::WriteAllBytes('phase2-source.zip', [Convert]::FromBase64String($base64))
           Expand-Archive phase2-source.zip -DestinationPath source -Force
           if (-not (Test-Path 'source/ClusterForge_Phase2/CMakeLists.txt')) { throw 'Source reconstruction failed.' }
+          New-Item -ItemType Directory -Force 'source/ClusterForge_Phase2/tests' | Out-Null
+          Copy-Item 'phase2-build/tests/*.cpp' 'source/ClusterForge_Phase2/tests/' -Force
 
       - name: Build native Windows x64 worker and watchdog
         shell: pwsh
