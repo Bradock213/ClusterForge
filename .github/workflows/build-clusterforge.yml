@@ -1,4 +1,4 @@
-name: Build ClusterForge Windows
+name: Build ClusterForge Windows Worker
 
 on:
   pull_request:
@@ -7,50 +7,58 @@ on:
 jobs:
   windows-x64:
     runs-on: windows-2025
-    timeout-minutes: 45
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
-      - name: Reconstruct source archive
+      - name: Reconstruct compact source
         shell: pwsh
         run: |
-          $parts = Get-ChildItem build-input/source.part*.txt | Sort-Object Name
-          if (-not $parts) { throw 'No source archive parts found.' }
-          $base64 = ($parts | ForEach-Object { Get-Content $_.FullName -Raw }) -join ''
-          [IO.File]::WriteAllBytes('ClusterForge_Phase1_Source.zip', [Convert]::FromBase64String($base64))
-          Expand-Archive ClusterForge_Phase1_Source.zip -DestinationPath extracted -Force
-          if (-not (Test-Path 'extracted/ClusterForge_Phase1/CMakeLists.txt')) { throw 'Source extraction failed.' }
+          $parts = Get-ChildItem windows-build/native.part*.txt | Sort-Object Name
+          if ($parts.Count -ne 2) { throw "Expected 2 source parts, got $($parts.Count)" }
+          $base64 = ($parts | ForEach-Object { (Get-Content $_.FullName -Raw).Trim() }) -join ''
+          [IO.File]::WriteAllBytes('windows-native.zip', [Convert]::FromBase64String($base64))
+          Expand-Archive windows-native.zip -DestinationPath build-src -Force
+          if (-not (Test-Path 'build-src/windows-native/CMakeLists.txt')) { throw 'Source reconstruction failed.' }
 
-      - name: Build native Windows x64 binaries
+      - name: Configure and build native Windows x64 EXEs
         shell: pwsh
-        working-directory: extracted/ClusterForge_Phase1
         run: |
-          $env:VCPKG_ROOT = 'C:\vcpkg'
-          & "$env:VCPKG_ROOT\vcpkg.exe" install --triplet x64-windows-static --x-manifest-root="$PWD"
-          if ($LASTEXITCODE -ne 0) { throw 'vcpkg install failed.' }
-          cmake -S . -B build/windows-ci -G "Visual Studio 17 2022" -A x64 `
-            -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake `
-            -DVCPKG_TARGET_TRIPLET=x64-windows-static `
-            -DCLUSTERFORGE_BUILD_TESTS=ON
+          cmake -S build-src/windows-native -B build/windows-x64 -G "Visual Studio 17 2022" -A x64
           if ($LASTEXITCODE -ne 0) { throw 'CMake configure failed.' }
-          cmake --build build/windows-ci --config Release --parallel
-          if ($LASTEXITCODE -ne 0) { throw 'Windows build failed.' }
-          ctest --test-dir build/windows-ci -C Release --output-on-failure
-          if ($LASTEXITCODE -ne 0) { throw 'Windows tests failed.' }
+          cmake --build build/windows-x64 --config Release --parallel
+          if ($LASTEXITCODE -ne 0) { throw 'Windows compilation failed.' }
+          $worker = 'build/windows-x64/Release/ClusterForgeWorker.exe'
+          $watchdog = 'build/windows-x64/Release/ClusterForgeWatchdog.exe'
+          if (-not (Test-Path $worker) -or -not (Test-Path $watchdog)) { throw 'Expected EXEs were not produced.' }
 
-      - name: Package Windows release
+      - name: Smoke test binaries
         shell: pwsh
-        working-directory: extracted/ClusterForge_Phase1
         run: |
-          New-Item -ItemType Directory -Force release/windows-x64/bin | Out-Null
-          Copy-Item build/windows-ci/bin/Release/*.exe release/windows-x64/bin/
-          Copy-Item web,config,scripts -Destination release/windows-x64 -Recurse
-          Copy-Item README.md,QUICK_START.txt,TEST_REPORT.md,LICENSE -Destination release/windows-x64
-          Get-FileHash release/windows-x64/bin/*.exe -Algorithm SHA256 | Format-Table -AutoSize | Out-File release/windows-x64/SHA256.txt
-          Compress-Archive -Path release/windows-x64/* -DestinationPath ClusterForge-windows-x64.zip -Force
+          $worker = Resolve-Path 'build/windows-x64/Release/ClusterForgeWorker.exe'
+          $watchdog = Resolve-Path 'build/windows-x64/Release/ClusterForgeWatchdog.exe'
+          $w = Start-Process $worker -ArgumentList '--stop' -PassThru -Wait
+          if ($w.ExitCode -notin @(0,2)) { throw "Worker smoke test failed: $($w.ExitCode)" }
+          $d = Start-Process $watchdog -ArgumentList '--target', 'Z:\definitely-missing.exe', '--delay', '1' -PassThru
+          Start-Sleep -Seconds 2
+          if ($d.HasExited) { throw "Watchdog exited unexpectedly: $($d.ExitCode)" }
+          Stop-Process -Id $d.Id -Force
+
+      - name: Package release
+        shell: pwsh
+        run: |
+          $out='release/ClusterForge-Windows-Worker-x64'
+          New-Item -ItemType Directory -Force $out | Out-Null
+          Copy-Item build/windows-x64/Release/ClusterForgeWorker.exe $out/
+          Copy-Item build/windows-x64/Release/ClusterForgeWatchdog.exe $out/
+          Copy-Item build-src/windows-native/install-worker.ps1 $out/
+          Copy-Item build-src/windows-native/uninstall-worker.ps1 $out/
+          Copy-Item build-src/windows-native/TESTING.txt $out/
+          Get-FileHash "$out/*.exe" -Algorithm SHA256 | ForEach-Object { "$($_.Hash)  $([IO.Path]::GetFileName($_.Path))" } | Set-Content "$out/SHA256.txt"
+          Compress-Archive -Path "$out/*" -DestinationPath ClusterForge-Windows-Worker-x64.zip -Force
 
       - uses: actions/upload-artifact@v4
         with:
-          name: ClusterForge-windows-x64
-          path: extracted/ClusterForge_Phase1/ClusterForge-windows-x64.zip
+          name: ClusterForge-Windows-Worker-x64
+          path: ClusterForge-Windows-Worker-x64.zip
           retention-days: 7
