@@ -22,6 +22,7 @@ jobs:
           if (-not (Test-Path 'source/ClusterForge_Phase2/CMakeLists.txt')) { throw 'Source reconstruction failed.' }
           New-Item -ItemType Directory -Force 'source/ClusterForge_Phase2/tests' | Out-Null
           Copy-Item 'phase2-build/tests/*.cpp' 'source/ClusterForge_Phase2/tests/' -Force
+          & 'phase2-build/patches/fix-common.ps1'
 
       - name: Build native Windows x64 worker and watchdog
         shell: pwsh
