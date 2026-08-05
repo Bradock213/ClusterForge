@@ -61,7 +61,11 @@ jobs:
           if ($hash -ne '2eb5e9e1b66ee58af21b449a4dfdb1f934399a7ea6ba338ef96250d9ba1ac529') { throw "Alpha 2 overlay checksum mismatch: $hash" }
           Expand-Archive phase3-alpha2-overlay.zip -DestinationPath source -Force
 
-          $patchBase64 = ((Get-Content 'phase3-alpha2-build/runtime.patch.gz.b64' -Raw) -replace '[^A-Za-z0-9+/=]', '')
+          $runtimeParts = Get-ChildItem 'phase3-alpha2-build/runtime-patch/part*.txt' | Sort-Object Name
+          if ($runtimeParts.Count -ne 6) { throw "Expected 6 runtime patch parts, got $($runtimeParts.Count)" }
+          $patchBase64 = ($runtimeParts | ForEach-Object { ((Get-Content $_.FullName -Raw) -replace '[^A-Za-z0-9+/=]', '') }) -join ''
+          $patchTextHash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::ASCII.GetBytes($patchBase64))).ToLowerInvariant()
+          if ($patchTextHash -ne 'abf18a3bbae6c5f1794276464ca03e969154e7f4cddafcf7823faaf8f1424d43') { throw "Runtime patch text checksum mismatch: $patchTextHash" }
           [IO.File]::WriteAllBytes('runtime.patch.gz', [Convert]::FromBase64String($patchBase64))
           $input = [IO.File]::OpenRead((Resolve-Path 'runtime.patch.gz'))
           $output = [IO.File]::Create((Join-Path $PWD 'runtime.patch'))
