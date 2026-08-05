@@ -1,0 +1,54 @@
+name: Diagnose ClusterForge Alpha 2 Overlay
+
+on:
+  pull_request:
+    paths:
+      - 'phase3-alpha2-build/**'
+      - '.github/workflows/diagnose-clusterforge-alpha2-overlay.yml'
+  workflow_dispatch:
+
+jobs:
+  reconstruct:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reconstruct uploaded overlay
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import base64, hashlib, re
+          paths = [
+              'phase3-alpha2-build/overlay.part00.txt',
+              'phase3-alpha2-build/overlay.part01.txt',
+              'phase3-alpha2-build/overlay.part02.txt',
+              'phase3-alpha2-build/overlay-fix/part03.00.txt',
+              'phase3-alpha2-build/overlay-fix/part03.01.txt',
+              'phase3-alpha2-build/overlay-fix/part03.02a.txt',
+              'phase3-alpha2-build/overlay-fix/part03.02b.txt',
+              'phase3-alpha2-build/overlay-fix/part03.02c.txt',
+              'phase3-alpha2-build/overlay-fix/part03.02d.txt',
+              'phase3-alpha2-build/overlay-fix/part04.00.txt',
+              'phase3-alpha2-build/overlay-fix/part04.01.txt',
+              'phase3-alpha2-build/overlay-fix/part04.02.txt',
+              'phase3-alpha2-build/overlay.part05.txt',
+          ]
+          segments = []
+          report = []
+          for path in paths:
+              text = Path(path).read_text(encoding='utf-8')
+              normalized = re.sub(r'[^A-Za-z0-9+/=]', '', text)
+              segments.append(normalized)
+              report.append(f'{path}\t{len(normalized)}\t{hashlib.sha256(normalized.encode()).hexdigest()}')
+          raw = base64.b64decode(''.join(segments), validate=True)
+          Path('phase3-alpha2-overlay-uploaded.zip').write_bytes(raw)
+          Path('phase3-alpha2-overlay-segments.txt').write_text('\n'.join(report) + '\n', encoding='utf-8')
+          print('uploaded overlay sha256:', hashlib.sha256(raw).hexdigest())
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ClusterForge-Alpha2-Overlay-Diagnostic
+          path: |
+            phase3-alpha2-overlay-uploaded.zip
+            phase3-alpha2-overlay-segments.txt
+          retention-days: 2
