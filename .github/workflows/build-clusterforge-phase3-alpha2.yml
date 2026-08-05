@@ -20,7 +20,7 @@ jobs:
         run: |
           $parts = Get-ChildItem phase3-build/native.part*.txt | Sort-Object Name
           if ($parts.Count -ne 7) { throw "Expected 7 base source parts, got $($parts.Count)" }
-          $base64 = ($parts | ForEach-Object { (Get-Content $_.FullName -Raw).Trim() }) -join ''
+          $base64 = ($parts | ForEach-Object { ((Get-Content $_.FullName -Raw) -replace '[^A-Za-z0-9+/=]', '') }) -join ''
           [IO.File]::WriteAllBytes('phase3-windows-native.zip', [Convert]::FromBase64String($base64))
           $hash = (Get-FileHash phase3-windows-native.zip -Algorithm SHA256).Hash.ToLowerInvariant()
           if ($hash -ne '443cb349a365d7600554693f12862a7dfacaeadb24b83fce35596fe796802ad6') {
@@ -34,7 +34,7 @@ jobs:
         run: |
           $parts = Get-ChildItem phase3-alpha2-build/overlay.part*.txt | Sort-Object Name
           if ($parts.Count -ne 6) { throw "Expected 6 Alpha 2 overlay parts, got $($parts.Count)" }
-          $base64 = ($parts | ForEach-Object { (Get-Content $_.FullName -Raw).Trim() }) -join ''
+          $base64 = ($parts | ForEach-Object { ((Get-Content $_.FullName -Raw) -replace '[^A-Za-z0-9+/=]', '') }) -join ''
           [IO.File]::WriteAllBytes('phase3-alpha2-overlay.zip', [Convert]::FromBase64String($base64))
           $hash = (Get-FileHash phase3-alpha2-overlay.zip -Algorithm SHA256).Hash.ToLowerInvariant()
           if ($hash -ne '2eb5e9e1b66ee58af21b449a4dfdb1f934399a7ea6ba338ef96250d9ba1ac529') {
@@ -42,7 +42,7 @@ jobs:
           }
           Expand-Archive phase3-alpha2-overlay.zip -DestinationPath source -Force
 
-          $patchBase64 = (Get-Content 'phase3-alpha2-build/runtime.patch.gz.b64' -Raw).Trim()
+          $patchBase64 = ((Get-Content 'phase3-alpha2-build/runtime.patch.gz.b64' -Raw) -replace '[^A-Za-z0-9+/=]', '')
           [IO.File]::WriteAllBytes('runtime.patch.gz', [Convert]::FromBase64String($patchBase64))
           $input = [IO.File]::OpenRead((Resolve-Path 'runtime.patch.gz'))
           $output = [IO.File]::Create((Join-Path $PWD 'runtime.patch'))
