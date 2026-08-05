@@ -50,10 +50,27 @@ jobs:
           $worker = 'build/windows/bin/Release/clusterforge-worker.exe'
           $watchdog = 'build/windows/bin/Release/clusterforge-watchdog.exe'
           if (-not (Test-Path $worker) -or -not (Test-Path $watchdog)) { throw 'Expected EXEs were not produced.' }
-          $workerHeaders = (& dumpbin /headers $worker | Out-String)
-          $watchdogHeaders = (& dumpbin /headers $watchdog | Out-String)
-          if ($workerHeaders -notmatch 'Windows GUI') { throw 'Worker is not linked as a Windows GUI application.' }
-          if ($watchdogHeaders -notmatch 'Windows GUI') { throw 'Watchdog is not linked as a Windows GUI application.' }
+
+          function Get-PESubsystem([string]$Path) {
+            $bytes = [IO.File]::ReadAllBytes((Resolve-Path $Path))
+            if ($bytes.Length -lt 256) { throw "PE file is unexpectedly small: $Path" }
+            $peOffset = [BitConverter]::ToInt32($bytes, 0x3c)
+            if ($peOffset -lt 0 -or ($peOffset + 256) -gt $bytes.Length) { throw "Invalid PE header offset: $Path" }
+            if ($bytes[$peOffset] -ne 0x50 -or $bytes[$peOffset + 1] -ne 0x45) { throw "Missing PE signature: $Path" }
+            $optionalOffset = $peOffset + 24
+            $magic = [BitConverter]::ToUInt16($bytes, $optionalOffset)
+            if ($magic -eq 0x20b) {
+              $subsystemOffset = $optionalOffset + 0x5c
+            } elseif ($magic -eq 0x10b) {
+              $subsystemOffset = $optionalOffset + 0x44
+            } else {
+              throw "Unknown PE optional-header magic $magic in $Path"
+            }
+            return [BitConverter]::ToUInt16($bytes, $subsystemOffset)
+          }
+
+          if ((Get-PESubsystem $worker) -ne 2) { throw 'Worker is not linked as a Windows GUI application.' }
+          if ((Get-PESubsystem $watchdog) -ne 2) { throw 'Watchdog is not linked as a Windows GUI application.' }
           $out = 'release/windows-x64'
           New-Item -ItemType Directory -Force $out | Out-Null
           Copy-Item $worker "$out/ClusterForgeWorker.exe"
