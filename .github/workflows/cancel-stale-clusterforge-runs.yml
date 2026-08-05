@@ -23,7 +23,7 @@ jobs:
             const owner = context.repo.owner;
             const repo = context.repo.repo;
             const current = context.runId;
-            core.info('ClusterForge Alpha 2 stale-run cleanup trigger 2026-08-05T17:10+02:00');
+            core.info('ClusterForge Alpha 2 stale-run cleanup trigger 2026-08-05T17:22+02:00');
             for (const status of ['queued', 'in_progress', 'waiting', 'requested', 'pending']) {
               const response = await github.paginate(github.rest.actions.listWorkflowRunsForRepo, {
                 owner,
