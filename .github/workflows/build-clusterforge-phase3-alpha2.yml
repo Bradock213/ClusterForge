@@ -42,9 +42,28 @@ jobs:
             'phase3-alpha2-build/overlay.fix04b.txt',
             'phase3-alpha2-build/overlay.part05.txt'
           )
-          $segments = foreach ($path in $orderedParts) {
+          $expectedHashes = @(
+            'cff02e91e1b53f82e9c421ebeecc723a01fe2b4709ce6dcf5ee166cb314cc9c6',
+            'f5c18b7315919acd4694c062e82ee379198410126a146d48bcc718ac823ac14e',
+            'a1013107074217fae77e4f7b5deb610d8136e5f8cf9f55d8234590d6e182edc8',
+            '6654ef8b3c4d5cbf78bab57ffe1f8f4e0a97ba47d77ff39c4508a9e700233424',
+            'd75e507e7ec0d03423b264a80e5665a705ebcdf5ccb3c6d181dbd7825d223878',
+            '2530fb953289278b0122bc5940ef5d5b9dbdfb4ce1287c41f637884cad537221',
+            '5f2ee1800d189e8a93ba1af3b95ceb80be6534e6fd968926a0c64b45128bd34b',
+            'fdefea1eb982f2204a1c504e441c872b1cf23dc20484a035750b611a8c3a139a'
+          )
+          $segments = @()
+          for ($i = 0; $i -lt $orderedParts.Count; $i++) {
+            $path = $orderedParts[$i]
             if (-not (Test-Path $path)) { throw "Missing overlay part: $path" }
-            ((Get-Content $path -Raw) -replace '[^A-Za-z0-9+/=]', '')
+            $segment = ((Get-Content $path -Raw) -replace '[^A-Za-z0-9+/=]', '')
+            $bytes = [Text.Encoding]::ASCII.GetBytes($segment)
+            $segmentHash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes)).ToLowerInvariant()
+            Write-Host "$path length=$($segment.Length) sha256=$segmentHash"
+            if ($segmentHash -ne $expectedHashes[$i]) {
+              throw "Overlay segment mismatch: $path expected $($expectedHashes[$i]) got $segmentHash"
+            }
+            $segments += $segment
           }
           $base64 = $segments -join ''
           [IO.File]::WriteAllBytes('phase3-alpha2-overlay.zip', [Convert]::FromBase64String($base64))
