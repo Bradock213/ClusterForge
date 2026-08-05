@@ -61,16 +61,16 @@ jobs:
           if ($hash -ne '2eb5e9e1b66ee58af21b449a4dfdb1f934399a7ea6ba338ef96250d9ba1ac529') { throw "Alpha 2 overlay checksum mismatch: $hash" }
           Expand-Archive phase3-alpha2-overlay.zip -DestinationPath source -Force
 
-          $runtimeParts = Get-ChildItem 'phase3-alpha2-build/runtime-fix/part*.txt' | Sort-Object Name
-          if ($runtimeParts.Count -ne 9) { throw "Expected 9 runtime patch parts, got $($runtimeParts.Count)" }
+          $runtimeParts = Get-ChildItem 'phase3-alpha2-build/runtime-patch/part*.txt' | Sort-Object Name
+          if ($runtimeParts.Count -ne 6) { throw "Expected 6 runtime patch parts, got $($runtimeParts.Count)" }
           $patchBase64 = ($runtimeParts | ForEach-Object { ((Get-Content $_.FullName -Raw) -replace '[^A-Za-z0-9+/=]', '') }) -join ''
-          if ($patchBase64.Length -ne 16896) { throw "Runtime patch text length mismatch: $($patchBase64.Length)" }
+          if ($patchBase64.Length -ne 10764) { throw "Runtime patch text length mismatch: $($patchBase64.Length)" }
           [IO.File]::WriteAllText('runtime-normalized.b64', $patchBase64, [Text.Encoding]::ASCII)
           $patchTextHash = (Get-FileHash 'runtime-normalized.b64' -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($patchTextHash -ne '02aed7724326dc12802733b993c10091d12982840e23f9fdd12c11a2d5f8e2b9') { throw "Runtime patch text checksum mismatch: $patchTextHash" }
+          if ($patchTextHash -ne 'abf18a3bbae6c5f1794276464ca03e969154e7f4cddafcf7823faaf8f1424d43') { throw "Runtime patch text checksum mismatch: $patchTextHash" }
           [IO.File]::WriteAllBytes('runtime.patch.gz', [Convert]::FromBase64String($patchBase64))
           $patchGzipHash = (Get-FileHash 'runtime.patch.gz' -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($patchGzipHash -ne '68eb29ecc3b41082f39d96227bec4334c9efeb664242debd86b804df2b996e1f') { throw "Runtime patch gzip checksum mismatch: $patchGzipHash" }
+          if ($patchGzipHash -ne 'a81687c435ed171aa3b5b634abbf9bce37dd1c44bf91239ca0e17bc3aca07455') { throw "Runtime patch gzip checksum mismatch: $patchGzipHash" }
           $input = [IO.File]::OpenRead((Resolve-Path 'runtime.patch.gz'))
           $output = [IO.File]::Create((Join-Path $PWD 'runtime.patch'))
           $gzip = [IO.Compression.GzipStream]::new($input, [IO.Compression.CompressionMode]::Decompress)
