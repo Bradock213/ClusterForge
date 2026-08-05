@@ -1,0 +1,5 @@
+Goals:
+- One Windows EXE for fresh install, repair, and in-place update.
+- Preserve existing ClusterForge node identity and configuration.
+- Retain private automatic Tailscale enrollment for new nodes.
+- Phase 3 Alpha 2 runtime-management and file/snapshot foundations.
