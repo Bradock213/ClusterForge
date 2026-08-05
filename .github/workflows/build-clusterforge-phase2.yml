@@ -1,4 +1,4 @@
-name: Build ClusterForge Phase 2 Windows Installer
+name: Build ClusterForge Phase 3 Alpha Windows
 
 on:
   pull_request:
@@ -11,22 +11,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Reconstruct Phase 2 source
+      - name: Reconstruct compact Phase 3 Alpha source
         shell: pwsh
         run: |
-          $parts = Get-ChildItem phase2-build/source.part*.txt | Sort-Object Name
-          if ($parts.Count -ne 4) { throw "Expected 4 source parts, got $($parts.Count)" }
+          $parts = Get-ChildItem phase3-build/native.part*.txt | Sort-Object Name
+          if ($parts.Count -ne 7) { throw "Expected 7 source parts, got $($parts.Count)" }
           $base64 = ($parts | ForEach-Object { (Get-Content $_.FullName -Raw).Trim() }) -join ''
-          [IO.File]::WriteAllBytes('phase2-source.zip', [Convert]::FromBase64String($base64))
-          Expand-Archive phase2-source.zip -DestinationPath source -Force
-          if (-not (Test-Path 'source/ClusterForge_Phase2/CMakeLists.txt')) { throw 'Source reconstruction failed.' }
-          New-Item -ItemType Directory -Force 'source/ClusterForge_Phase2/tests' | Out-Null
-          Copy-Item 'phase2-build/tests/*.cpp' 'source/ClusterForge_Phase2/tests/' -Force
-          & 'phase2-build/patches/fix-common.ps1'
+          [IO.File]::WriteAllBytes('phase3-windows-native.zip', [Convert]::FromBase64String($base64))
+          $hash = (Get-FileHash phase3-windows-native.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($hash -ne '443cb349a365d7600554693f12862a7dfacaeadb24b83fce35596fe796802ad6') {
+            throw "Source archive checksum mismatch: $hash"
+          }
+          Expand-Archive phase3-windows-native.zip -DestinationPath source -Force
+          if (-not (Test-Path 'source/phase3-windows-native/CMakeLists.txt')) { throw 'Source reconstruction failed.' }
 
       - name: Build native Windows x64 worker and watchdog
         shell: pwsh
-        working-directory: source/ClusterForge_Phase2
+        working-directory: source/phase3-windows-native
         run: |
           $env:VCPKG_ROOT = 'C:\vcpkg'
           & "$env:VCPKG_ROOT\vcpkg.exe" install --triplet x64-windows-static --x-manifest-root="$PWD"
@@ -41,51 +42,29 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Windows compilation failed.' }
           ctest --test-dir build/windows -C Release --output-on-failure
           if ($LASTEXITCODE -ne 0) { throw 'Windows tests failed.' }
-          if (-not (Test-Path 'build/windows/bin/Release/clusterforge-worker.exe')) { throw 'Worker EXE missing.' }
-          if (-not (Test-Path 'build/windows/bin/Release/clusterforge-watchdog.exe')) { throw 'Watchdog EXE missing.' }
 
-      - name: Install Inno Setup
+      - name: Verify GUI subsystem and package
         shell: pwsh
+        working-directory: source/phase3-windows-native
         run: |
-          choco install innosetup -y --no-progress
-          if ($LASTEXITCODE -ne 0) { throw 'Inno Setup installation failed.' }
-
-      - name: Build classic Windows installer
-        shell: pwsh
-        working-directory: source/ClusterForge_Phase2
-        run: |
-          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
-          if (-not (Test-Path $iscc)) { throw "ISCC.exe not found at $iscc" }
-          & $iscc 'installer/windows/ClusterForgeWorker.iss'
-          if ($LASTEXITCODE -ne 0) { throw 'Installer compilation failed.' }
-          $setup = 'installer/windows/output/ClusterForge-Worker-Setup-x64.exe'
-          if (-not (Test-Path $setup)) { throw 'Installer EXE missing.' }
-
-      - name: Installer smoke test
-        shell: pwsh
-        working-directory: source/ClusterForge_Phase2
-        run: |
-          $setup = Resolve-Path 'installer/windows/output/ClusterForge-Worker-Setup-x64.exe'
-          $info = Get-Item $setup
-          if ($info.Length -lt 100000) { throw 'Installer is unexpectedly small.' }
-          $worker = Get-Item 'build/windows/bin/Release/clusterforge-worker.exe'
-          $watchdog = Get-Item 'build/windows/bin/Release/clusterforge-watchdog.exe'
-          if ($worker.Length -lt 50000 -or $watchdog.Length -lt 20000) { throw 'Compiled binary is unexpectedly small.' }
-
-      - name: Package release and checksums
-        shell: pwsh
-        working-directory: source/ClusterForge_Phase2
-        run: |
+          $worker = 'build/windows/bin/Release/clusterforge-worker.exe'
+          $watchdog = 'build/windows/bin/Release/clusterforge-watchdog.exe'
+          if (-not (Test-Path $worker) -or -not (Test-Path $watchdog)) { throw 'Expected EXEs were not produced.' }
+          $workerHeaders = (& dumpbin /headers $worker | Out-String)
+          $watchdogHeaders = (& dumpbin /headers $watchdog | Out-String)
+          if ($workerHeaders -notmatch 'Windows GUI') { throw 'Worker is not linked as a Windows GUI application.' }
+          if ($watchdogHeaders -notmatch 'Windows GUI') { throw 'Watchdog is not linked as a Windows GUI application.' }
           $out = 'release/windows-x64'
           New-Item -ItemType Directory -Force $out | Out-Null
-          Copy-Item installer/windows/output/ClusterForge-Worker-Setup-x64.exe $out/
-          Copy-Item build/windows/bin/Release/clusterforge-worker.exe $out/ClusterForgeWorker.exe
-          Copy-Item build/windows/bin/Release/clusterforge-watchdog.exe $out/ClusterForgeWatchdog.exe
-          Copy-Item LICENSE-EULA.txt $out/
-          Get-FileHash "$out/*" -Algorithm SHA256 | ForEach-Object { "$($_.Hash)  $([IO.Path]::GetFileName($_.Path))" } | Set-Content "$out/SHA256.txt"
+          Copy-Item $worker "$out/ClusterForgeWorker.exe"
+          Copy-Item $watchdog "$out/ClusterForgeWatchdog.exe"
+          Get-FileHash "$out/*.exe" -Algorithm SHA256 | ForEach-Object {
+            "$($_.Hash.ToLowerInvariant())  $([IO.Path]::GetFileName($_.Path))"
+          } | Set-Content "$out/SHA256.txt"
+          Compress-Archive -Path "$out/*" -DestinationPath ClusterForge-Phase3-Alpha1-Windows-x64.zip -Force
 
       - uses: actions/upload-artifact@v4
         with:
-          name: ClusterForge-Phase2-Windows-x64
-          path: source/ClusterForge_Phase2/release/windows-x64
+          name: ClusterForge-Phase3-Alpha1-Windows-x64
+          path: source/phase3-windows-native/ClusterForge-Phase3-Alpha1-Windows-x64.zip
           retention-days: 7
