@@ -59,13 +59,10 @@ jobs:
             if ($bytes[$peOffset] -ne 0x50 -or $bytes[$peOffset + 1] -ne 0x45) { throw "Missing PE signature: $Path" }
             $optionalOffset = $peOffset + 24
             $magic = [BitConverter]::ToUInt16($bytes, $optionalOffset)
-            if ($magic -eq 0x20b) {
-              $subsystemOffset = $optionalOffset + 0x5c
-            } elseif ($magic -eq 0x10b) {
-              $subsystemOffset = $optionalOffset + 0x44
-            } else {
+            if ($magic -ne 0x20b -and $magic -ne 0x10b) {
               throw "Unknown PE optional-header magic $magic in $Path"
             }
+            $subsystemOffset = $optionalOffset + 0x44
             return [BitConverter]::ToUInt16($bytes, $subsystemOffset)
           }
 
