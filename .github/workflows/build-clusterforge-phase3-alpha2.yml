@@ -29,7 +29,7 @@ jobs:
           Expand-Archive phase3-windows-native.zip -DestinationPath source -Force
           if (-not (Test-Path 'source/phase3-windows-native/CMakeLists.txt')) { throw 'Base source reconstruction failed.' }
 
-      - name: Apply Phase 3 Alpha 2 overlay
+      - name: Apply Phase 3 Alpha 2 overlay and runtime manager patch
         shell: pwsh
         run: |
           $parts = Get-ChildItem phase3-alpha2-build/overlay.part*.txt | Sort-Object Name
@@ -41,8 +41,25 @@ jobs:
             throw "Alpha 2 overlay checksum mismatch: $hash"
           }
           Expand-Archive phase3-alpha2-overlay.zip -DestinationPath source -Force
+
+          $patchBase64 = (Get-Content 'phase3-alpha2-build/runtime.patch.gz.b64' -Raw).Trim()
+          [IO.File]::WriteAllBytes('runtime.patch.gz', [Convert]::FromBase64String($patchBase64))
+          $input = [IO.File]::OpenRead((Resolve-Path 'runtime.patch.gz'))
+          $output = [IO.File]::Create((Join-Path $PWD 'runtime.patch'))
+          $gzip = [IO.Compression.GzipStream]::new($input, [IO.Compression.CompressionMode]::Decompress)
+          try { $gzip.CopyTo($output) } finally { $gzip.Dispose(); $output.Dispose(); $input.Dispose() }
+
+          Push-Location 'source/phase3-windows-native'
+          git apply --check -p2 "$env:GITHUB_WORKSPACE/runtime.patch"
+          if ($LASTEXITCODE -ne 0) { throw 'Runtime manager patch validation failed.' }
+          git apply -p2 "$env:GITHUB_WORKSPACE/runtime.patch"
+          if ($LASTEXITCODE -ne 0) { throw 'Runtime manager patch failed.' }
+          Pop-Location
+
           $cmake = Get-Content 'source/phase3-windows-native/CMakeLists.txt' -Raw
-          if ($cmake -notmatch 'file_ops_test') { throw 'Alpha 2 overlay was not applied.' }
+          if ($cmake -notmatch 'runtime_ops_test') { throw 'The complete Alpha 2 patch was not applied.' }
+          $version = Get-Content 'source/phase3-windows-native/src/common.hpp' -Raw
+          if ($version -notmatch '0\.3\.1-phase3-alpha2') { throw 'The source version is not Alpha 2.' }
 
       - name: Build native Windows x64 payload
         shell: pwsh
