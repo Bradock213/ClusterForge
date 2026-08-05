@@ -11,7 +11,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Reconstruct compact Phase 3 Alpha source
+      - name: Reconstruct and patch compact Phase 3 Alpha source
         shell: pwsh
         run: |
           $parts = Get-ChildItem phase3-build/native.part*.txt | Sort-Object Name
@@ -23,7 +23,13 @@ jobs:
             throw "Source archive checksum mismatch: $hash"
           }
           Expand-Archive phase3-windows-native.zip -DestinationPath source -Force
-          if (-not (Test-Path 'source/phase3-windows-native/CMakeLists.txt')) { throw 'Source reconstruction failed.' }
+          $cmakePath = 'source/phase3-windows-native/CMakeLists.txt'
+          if (-not (Test-Path $cmakePath)) { throw 'Source reconstruction failed.' }
+          $cmake = Get-Content $cmakePath -Raw
+          $cmake = $cmake.Replace('add_executable(clusterforge-worker src/worker_main.cpp)', 'add_executable(clusterforge-worker WIN32 src/worker_main.cpp)')
+          $cmake = $cmake.Replace('add_executable(clusterforge-watchdog src/watchdog_main.cpp)', 'add_executable(clusterforge-watchdog WIN32 src/watchdog_main.cpp)')
+          $cmake = $cmake.Replace('/SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup', '/ENTRY:mainCRTStartup')
+          Set-Content -Path $cmakePath -Value $cmake -NoNewline
 
       - name: Build native Windows x64 worker and watchdog
         shell: pwsh
@@ -43,14 +49,13 @@ jobs:
           ctest --test-dir build/windows -C Release --output-on-failure
           if ($LASTEXITCODE -ne 0) { throw 'Windows tests failed.' }
 
-      - name: Verify GUI subsystem and package
+      - name: Verify GUI subsystem
         shell: pwsh
         working-directory: source/phase3-windows-native
         run: |
           $worker = 'build/windows/bin/Release/clusterforge-worker.exe'
           $watchdog = 'build/windows/bin/Release/clusterforge-watchdog.exe'
           if (-not (Test-Path $worker) -or -not (Test-Path $watchdog)) { throw 'Expected EXEs were not produced.' }
-
           function Get-PESubsystem([string]$Path) {
             $bytes = [IO.File]::ReadAllBytes((Resolve-Path $Path))
             if ($bytes.Length -lt 256) { throw "PE file is unexpectedly small: $Path" }
@@ -59,20 +64,113 @@ jobs:
             if ($bytes[$peOffset] -ne 0x50 -or $bytes[$peOffset + 1] -ne 0x45) { throw "Missing PE signature: $Path" }
             $optionalOffset = $peOffset + 24
             $magic = [BitConverter]::ToUInt16($bytes, $optionalOffset)
-            if ($magic -ne 0x20b -and $magic -ne 0x10b) {
-              throw "Unknown PE optional-header magic $magic in $Path"
-            }
-            $subsystemOffset = $optionalOffset + 0x44
-            return [BitConverter]::ToUInt16($bytes, $subsystemOffset)
+            if ($magic -ne 0x20b -and $magic -ne 0x10b) { throw "Unknown PE optional-header magic $magic in $Path" }
+            return [BitConverter]::ToUInt16($bytes, $optionalOffset + 0x44)
           }
-
           if ((Get-PESubsystem $worker) -ne 2) { throw 'Worker is not linked as a Windows GUI application.' }
           if ((Get-PESubsystem $watchdog) -ne 2) { throw 'Watchdog is not linked as a Windows GUI application.' }
+
+      - name: Build repair and upgrade installer
+        shell: pwsh
+        working-directory: source/phase3-windows-native
+        run: |
+          choco install innosetup -y --no-progress
+          if ($LASTEXITCODE -ne 0) { throw 'Inno Setup installation failed.' }
+          @'
+          CLUSTERFORGE ALPHA SOFTWARE LICENSE AGREEMENT
+          Version 0.3.0 - Phase 3 Alpha 1
+
+          This update is for computers you own or are authorized to administer.
+          ClusterForge is alpha software. Keep independent backups.
+          It supervises only ClusterForge processes and never power-cycles the laptop.
+          Stateful Minecraft/FiveM failover is not enabled in this alpha.
+          '@ | Set-Content LICENSE-EULA.txt
+          @'
+          #define MyAppName "ClusterForge Phase 3 Alpha 1 Repair"
+          #define MyAppVersion "0.3.0"
+
+          [Setup]
+          AppId={{D38DA3E9-574C-4CC7-A74B-5CB8E3051529}
+          AppName={#MyAppName}
+          AppVersion={#MyAppVersion}
+          DefaultDirName={localappdata}\ClusterForge
+          DisableDirPage=yes
+          DisableProgramGroupPage=yes
+          OutputDir=installer-output
+          OutputBaseFilename=ClusterForge-Phase3-Alpha1-Windows-Repair-Setup
+          Compression=lzma2/ultra64
+          SolidCompression=yes
+          ArchitecturesAllowed=x64compatible
+          ArchitecturesInstallIn64BitMode=x64compatible
+          PrivilegesRequired=lowest
+          WizardStyle=modern
+          LicenseFile=LICENSE-EULA.txt
+          Uninstallable=no
+          CloseApplications=no
+          RestartApplications=no
+
+          [Files]
+          Source: "build\windows\bin\Release\clusterforge-worker.exe"; DestDir: "{app}\bin"; DestName: "ClusterForgeWorker.exe"; Flags: ignoreversion
+          Source: "build\windows\bin\Release\clusterforge-watchdog.exe"; DestDir: "{app}\bin"; DestName: "ClusterForgeWatchdog.exe"; Flags: ignoreversion
+
+          [Registry]
+          Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "ClusterForge Worker"; ValueData: """{app}\bin\ClusterForgeWatchdog.exe"" --config ""{app}\config\watchdog-worker.json"""; Flags: uninsdeletevalue
+
+          [Icons]
+          Name: "{userstartup}\ClusterForge Worker"; Filename: "{app}\bin\ClusterForgeWatchdog.exe"; Parameters: "--config ""{app}\config\watchdog-worker.json"""; WorkingDir: "{app}"
+          Name: "{userprograms}\ClusterForge\Start ClusterForge Worker"; Filename: "{app}\bin\ClusterForgeWatchdog.exe"; Parameters: "--config ""{app}\config\watchdog-worker.json"""; WorkingDir: "{app}"
+          Name: "{userprograms}\ClusterForge\Open ClusterForge Folder"; Filename: "{app}"
+
+          [Run]
+          Filename: "{app}\bin\ClusterForgeWatchdog.exe"; Parameters: "--config ""{app}\config\watchdog-worker.json"""; WorkingDir: "{app}"; Flags: nowait
+
+          [Code]
+          function InitializeSetup(): Boolean;
+          begin
+            Result := FileExists(ExpandConstant('{localappdata}\ClusterForge\config\worker.json')) and
+                      FileExists(ExpandConstant('{localappdata}\ClusterForge\config\watchdog-worker.json'));
+            if not Result then
+              MsgBox('The existing ClusterForge worker configuration was not found. Run the full automatic worker installer first.', mbError, MB_OK);
+          end;
+
+          function PrepareToInstall(var NeedsRestart: Boolean): String;
+          var
+            ResultCode: Integer;
+          begin
+            Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM ClusterForgeWorker.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+            Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM ClusterForgeWatchdog.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+            Sleep(1000);
+            Result := '';
+          end;
+
+          procedure CurStepChanged(CurStep: TSetupStep);
+          var
+            ResultCode: Integer;
+            Watchdog, ConfigFile, Params: String;
+          begin
+            if CurStep = ssPostInstall then
+            begin
+              Watchdog := ExpandConstant('{app}\bin\ClusterForgeWatchdog.exe');
+              ConfigFile := ExpandConstant('{app}\config\watchdog-worker.json');
+              Params := '/Create /F /SC ONLOGON /RL LIMITED /TN "ClusterForge Worker" /TR """' + Watchdog + '"" --config ""' + ConfigFile + '"""';
+              Exec(ExpandConstant('{sys}\schtasks.exe'), Params, '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+            end;
+          end;
+          '@ | Set-Content ClusterForgeRepair.iss
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          & $iscc ClusterForgeRepair.iss
+          if ($LASTEXITCODE -ne 0) { throw 'Repair installer compilation failed.' }
+
+      - name: Package release and checksums
+        shell: pwsh
+        working-directory: source/phase3-windows-native
+        run: |
           $out = 'release/windows-x64'
           New-Item -ItemType Directory -Force $out | Out-Null
-          Copy-Item $worker "$out/ClusterForgeWorker.exe"
-          Copy-Item $watchdog "$out/ClusterForgeWatchdog.exe"
-          Get-FileHash "$out/*.exe" -Algorithm SHA256 | ForEach-Object {
+          Copy-Item build/windows/bin/Release/clusterforge-worker.exe "$out/ClusterForgeWorker.exe"
+          Copy-Item build/windows/bin/Release/clusterforge-watchdog.exe "$out/ClusterForgeWatchdog.exe"
+          Copy-Item installer-output/ClusterForge-Phase3-Alpha1-Windows-Repair-Setup.exe $out/
+          Get-FileHash "$out/*" -Algorithm SHA256 | ForEach-Object {
             "$($_.Hash.ToLowerInvariant())  $([IO.Path]::GetFileName($_.Path))"
           } | Set-Content "$out/SHA256.txt"
           Compress-Archive -Path "$out/*" -DestinationPath ClusterForge-Phase3-Alpha1-Windows-x64.zip -Force
