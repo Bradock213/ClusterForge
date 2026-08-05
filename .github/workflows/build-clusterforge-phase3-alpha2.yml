@@ -18,7 +18,7 @@ jobs:
         run: |
           $s = ((Get-Content 'phase3-alpha2-build/overlay.part04.txt' -Raw) -replace '[^A-Za-z0-9+/=]', '')
           Write-Host "length=$($s.Length)"
-          foreach ($length in 1000,2000,3000,4000,5000,6000,7000,8000,9000,10000,11000,11999) {
+          for ($length = 10000; $length -le 11000; $length += 25) {
             $bytes = [Text.Encoding]::ASCII.GetBytes($s.Substring(0, $length))
             $hash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes)).ToLowerInvariant()
             Write-Host "prefix $length $hash"
