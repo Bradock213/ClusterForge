@@ -32,11 +32,23 @@ jobs:
       - name: Apply Phase 3 Alpha 2 overlay and runtime manager patch
         shell: pwsh
         run: |
-          $parts = Get-ChildItem phase3-alpha2-build/overlay.part*.txt | Sort-Object Name
-          if ($parts.Count -ne 6) { throw "Expected 6 Alpha 2 overlay parts, got $($parts.Count)" }
-          $segments = @($parts | ForEach-Object { ((Get-Content $_.FullName -Raw) -replace '[^A-Za-z0-9+/=]', '') })
-          if ($segments[4].Length -eq 11999) {
-            $segments[4] = $segments[4].Insert(10280, 'v')
+          $orderedParts = @(
+            @{ Path = 'phase3-alpha2-build/overlay.part00.txt'; Sha = '7eefd48fe047001adc3194fcc29a265499310411' },
+            @{ Path = 'phase3-alpha2-build/overlay.part01.txt'; Sha = '18e938350f860cd93ec7c5fbadc8b8ea7280c426' },
+            @{ Path = 'phase3-alpha2-build/overlay.part02.txt'; Sha = '2c9c9a39944dbccca6b7f35a6885c17e8c8c1323' },
+            @{ Path = 'phase3-alpha2-build/overlay-fix/part03.00.txt'; Sha = 'a1405c96dd0017e75dc58c6e815117ff222fa2b6' },
+            @{ Path = 'phase3-alpha2-build/overlay-fix/part03.01.txt'; Sha = '0ba736a09a5dbb45d9fb96c423d02e2962b232e8' },
+            @{ Path = 'phase3-alpha2-build/overlay-fix/part03.02.txt'; Sha = 'eb6056c15c153435d3777f5e0a162599949f9e14' },
+            @{ Path = 'phase3-alpha2-build/overlay-fix/part04.00.txt'; Sha = 'f111cc31e0a0cd74bc3cb83a9abc90e0a2453799' },
+            @{ Path = 'phase3-alpha2-build/overlay-fix/part04.01.txt'; Sha = 'a93841e6402b6f64511abab90a75f94e6eebd9b4' },
+            @{ Path = 'phase3-alpha2-build/overlay-fix/part04.02.txt'; Sha = '096182f653bbbe7c111d3bac63f5be7e498fa046' },
+            @{ Path = 'phase3-alpha2-build/overlay.part05.txt'; Sha = '68f621d9322a0f131274ee0e2af39adf247aad04' }
+          )
+          $segments = foreach ($part in $orderedParts) {
+            if (-not (Test-Path $part.Path)) { throw "Missing overlay part: $($part.Path)" }
+            $blobSha = (git hash-object $part.Path).Trim().ToLowerInvariant()
+            if ($blobSha -ne $part.Sha) { throw "Overlay part checksum mismatch for $($part.Path): $blobSha" }
+            ((Get-Content $part.Path -Raw) -replace '[^A-Za-z0-9+/=]', '')
           }
           $base64 = $segments -join ''
           [IO.File]::WriteAllBytes('phase3-alpha2-overlay.zip', [Convert]::FromBase64String($base64))
