@@ -1,7 +1,9 @@
 name: Diagnose ClusterForge Alpha 2 Overlay
 
 on:
-  pull_request:
+  push:
+    branches:
+      - clusterforge-phase3-alpha2-build
     paths:
       - 'phase3-alpha2-build/**'
       - '.github/workflows/diagnose-clusterforge-alpha2-overlay.yml'
@@ -12,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Reconstruct uploaded overlay
+      - name: Reconstruct uploaded Alpha 2 data
         shell: bash
         run: |
           python3 - <<'PY'
@@ -36,14 +38,20 @@ jobs:
           segments = []
           report = []
           for path in paths:
-              text = Path(path).read_text(encoding='utf-8')
-              normalized = re.sub(r'[^A-Za-z0-9+/=]', '', text)
+              normalized = re.sub(r'[^A-Za-z0-9+/=]', '', Path(path).read_text(encoding='utf-8'))
               segments.append(normalized)
               report.append(f'{path}\t{len(normalized)}\t{hashlib.sha256(normalized.encode()).hexdigest()}')
           raw = base64.b64decode(''.join(segments), validate=True)
           Path('phase3-alpha2-overlay-uploaded.zip').write_bytes(raw)
           Path('phase3-alpha2-overlay-segments.txt').write_text('\n'.join(report) + '\n', encoding='utf-8')
-          print('uploaded overlay sha256:', hashlib.sha256(raw).hexdigest())
+
+          runtime = re.sub(r'[^A-Za-z0-9+/=]', '', Path('phase3-alpha2-build/runtime.patch.gz.b64').read_text(encoding='utf-8'))
+          Path('runtime-uploaded.b64').write_text(runtime, encoding='ascii')
+          Path('runtime-uploaded-report.txt').write_text(
+              f'length={len(runtime)}\nsha256={hashlib.sha256(runtime.encode()).hexdigest()}\nmod4={len(runtime)%4}\n',
+              encoding='utf-8')
+          print('overlay sha256:', hashlib.sha256(raw).hexdigest())
+          print('runtime length:', len(runtime), 'sha256:', hashlib.sha256(runtime.encode()).hexdigest(), 'mod4:', len(runtime)%4)
           PY
       - uses: actions/upload-artifact@v4
         with:
@@ -51,4 +59,6 @@ jobs:
           path: |
             phase3-alpha2-overlay-uploaded.zip
             phase3-alpha2-overlay-segments.txt
+            runtime-uploaded.b64
+            runtime-uploaded-report.txt
           retention-days: 2
