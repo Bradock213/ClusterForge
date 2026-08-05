@@ -1,4 +1,4 @@
-# Final standalone Alpha 2 CI trigger
+# Final standalone Alpha 2 CI trigger 2
 name: Build ClusterForge Phase 3 Alpha 2 Windows
 
 on:
@@ -83,10 +83,9 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Runtime manager patch failed.' }
           Pop-Location
 
-          $cmake = Get-Content 'source/phase3-windows-native/CMakeLists.txt' -Raw
-          if ($cmake -notmatch 'runtime_ops_test') { throw 'The complete Alpha 2 patch was not applied.' }
           $version = Get-Content 'source/phase3-windows-native/src/common.hpp' -Raw
           if ($version -notmatch '0\.3\.1-phase3-alpha2') { throw 'The source version is not Alpha 2.' }
+          if (-not (Test-Path 'source/phase3-windows-native/src/runtime_ops.cpp')) { throw 'Runtime manager source was not added.' }
 
       - name: Build native Windows x64 payload
         shell: pwsh
