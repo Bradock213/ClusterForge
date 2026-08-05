@@ -1,0 +1,8 @@
+CI must validate:
+1. Alpha 1 source reconstruction and Alpha 2 overlay checksum.
+2. Windows x64 static build.
+3. Scheduler, process manager, runtime operations, file operations, and snapshot tests.
+4. GUI subsystem for worker and watchdog.
+5. Unified installer compilation.
+6. Upgrade-mode preservation fixtures and fresh-install fixture validation.
+7. Release checksums and artifact upload.

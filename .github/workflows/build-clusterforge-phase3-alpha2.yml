@@ -1,0 +1,184 @@
+name: Build ClusterForge Phase 3 Alpha 2 Windows
+
+on:
+  push:
+    branches:
+      - clusterforge-phase3-alpha2-build
+    paths:
+      - 'phase3-build/**'
+      - 'phase3-alpha2-build/**'
+      - '.github/workflows/build-clusterforge-phase3-alpha2.yml'
+  pull_request:
+    paths:
+      - 'phase3-build/**'
+      - 'phase3-alpha2-build/**'
+      - '.github/workflows/build-clusterforge-phase3-alpha2.yml'
+  workflow_dispatch:
+
+jobs:
+  windows-x64:
+    runs-on: windows-2022
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Reconstruct Phase 3 Alpha 1 base source
+        shell: pwsh
+        run: |
+          $parts = Get-ChildItem phase3-build/native.part*.txt | Sort-Object Name
+          if ($parts.Count -ne 7) { throw "Expected 7 base source parts, got $($parts.Count)" }
+          $base64 = ($parts | ForEach-Object { ((Get-Content $_.FullName -Raw) -replace '[^A-Za-z0-9+/=]', '') }) -join ''
+          [IO.File]::WriteAllBytes('phase3-windows-native.zip', [Convert]::FromBase64String($base64))
+          $hash = (Get-FileHash phase3-windows-native.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($hash -ne '443cb349a365d7600554693f12862a7dfacaeadb24b83fce35596fe796802ad6') { throw "Base source archive checksum mismatch: $hash" }
+          Expand-Archive phase3-windows-native.zip -DestinationPath source -Force
+          if (-not (Test-Path 'source/phase3-windows-native/CMakeLists.txt')) { throw 'Base source reconstruction failed.' }
+
+      - name: Apply Phase 3 Alpha 2 source overlay
+        shell: pwsh
+        run: |
+          $orderedParts = @(
+            'phase3-alpha2-build/overlay.part00.txt',
+            'phase3-alpha2-build/overlay.part01.txt',
+            'phase3-alpha2-build/overlay.part02.txt',
+            'phase3-alpha2-build/overlay-fix/part03.00.txt',
+            'phase3-alpha2-build/overlay-fix/part03.01.txt',
+            'phase3-alpha2-build/overlay-fix/part03.02a.txt',
+            'phase3-alpha2-build/overlay-fix/part03.02b.txt',
+            'phase3-alpha2-build/overlay-fix/part03.02c.txt',
+            'phase3-alpha2-build/overlay-fix/part03.02d.txt',
+            'phase3-alpha2-build/overlay-fix/part04.00.txt',
+            'phase3-alpha2-build/overlay-fix/part04.01.txt',
+            'phase3-alpha2-build/overlay-fix/part04.02.txt',
+            'phase3-alpha2-build/overlay.part05.txt'
+          )
+          $segments = foreach ($path in $orderedParts) {
+            if (-not (Test-Path $path)) { throw "Missing overlay part: $path" }
+            ((Get-Content $path -Raw) -replace '[^A-Za-z0-9+/=]', '')
+          }
+          [IO.File]::WriteAllBytes('phase3-alpha2-overlay.zip', [Convert]::FromBase64String(($segments -join '')))
+          $hash = (Get-FileHash phase3-alpha2-overlay.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($hash -ne '2eb5e9e1b66ee58af21b449a4dfdb1f934399a7ea6ba338ef96250d9ba1ac529') { throw "Alpha 2 overlay checksum mismatch: $hash" }
+          Expand-Archive phase3-alpha2-overlay.zip -DestinationPath source -Force
+
+          $runtimeParts = Get-ChildItem 'phase3-alpha2-build/runtime-patch/part*.txt' | Sort-Object Name
+          if ($runtimeParts.Count -ne 6) { throw "Expected 6 runtime patch parts, got $($runtimeParts.Count)" }
+          $patchBase64 = ($runtimeParts | ForEach-Object { ((Get-Content $_.FullName -Raw) -replace '[^A-Za-z0-9+/=]', '') }) -join ''
+          if ($patchBase64.Length -ne 10764) { throw "Runtime patch text length mismatch: $($patchBase64.Length)" }
+          [IO.File]::WriteAllText('runtime-normalized.b64', $patchBase64, [Text.Encoding]::ASCII)
+          $patchTextHash = (Get-FileHash 'runtime-normalized.b64' -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($patchTextHash -ne 'abf18a3bbae6c5f1794276464ca03e969154e7f4cddafcf7823faaf8f1424d43') { throw "Runtime patch text checksum mismatch: $patchTextHash" }
+          [IO.File]::WriteAllBytes('runtime.patch.gz', [Convert]::FromBase64String($patchBase64))
+          $patchGzipHash = (Get-FileHash 'runtime.patch.gz' -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($patchGzipHash -ne 'a81687c435ed171aa3b5b634abbf9bce37dd1c44bf91239ca0e17bc3aca07455') { throw "Runtime patch gzip checksum mismatch: $patchGzipHash" }
+          $input = [IO.File]::OpenRead((Resolve-Path 'runtime.patch.gz'))
+          $output = [IO.File]::Create((Join-Path $PWD 'runtime.patch'))
+          $gzip = [IO.Compression.GzipStream]::new($input, [IO.Compression.CompressionMode]::Decompress)
+          try { $gzip.CopyTo($output) } finally { $gzip.Dispose(); $output.Dispose(); $input.Dispose() }
+          Push-Location 'source/phase3-windows-native'
+          git apply --check -p2 "$env:GITHUB_WORKSPACE/runtime.patch"
+          if ($LASTEXITCODE -ne 0) { throw 'Runtime manager patch validation failed.' }
+          git apply -p2 "$env:GITHUB_WORKSPACE/runtime.patch"
+          if ($LASTEXITCODE -ne 0) { throw 'Runtime manager patch failed.' }
+          Pop-Location
+
+          @'
+          cmake_minimum_required(VERSION 3.24)
+          project(ClusterForgeWindowsWorker VERSION 0.3.1 LANGUAGES CXX)
+          set(CMAKE_CXX_STANDARD 20)
+          set(CMAKE_CXX_STANDARD_REQUIRED ON)
+          set(CMAKE_CXX_EXTENSIONS OFF)
+          option(CLUSTERFORGE_BUILD_TESTS "Build tests" ON)
+          find_package(Boost 1.81 REQUIRED)
+          find_package(OpenSSL REQUIRED)
+          find_package(Threads REQUIRED)
+          add_library(clusterforge_core
+            src/boost_json.cpp src/common.cpp src/file_ops.cpp src/http.cpp src/platform.cpp src/process_manager.cpp src/runtime_ops.cpp src/scheduler.cpp)
+          target_include_directories(clusterforge_core PUBLIC src ${Boost_INCLUDE_DIRS})
+          target_compile_definitions(clusterforge_core PUBLIC BOOST_JSON_NO_LIB BOOST_ERROR_CODE_HEADER_ONLY BOOST_SYSTEM_NO_LIB BOOST_ASIO_NO_DEPRECATED _WIN32_WINNT=0x0A00 NOMINMAX WIN32_LEAN_AND_MEAN)
+          target_link_libraries(clusterforge_core PUBLIC OpenSSL::SSL OpenSSL::Crypto Threads::Threads ws2_32 crypt32 iphlpapi advapi32)
+          if(MSVC)
+            target_compile_options(clusterforge_core PRIVATE /W4 /permissive- /EHsc)
+          endif()
+          add_executable(clusterforge-worker WIN32 src/worker_main.cpp)
+          add_executable(clusterforge-watchdog WIN32 src/watchdog_main.cpp)
+          target_link_libraries(clusterforge-worker PRIVATE clusterforge_core)
+          target_link_libraries(clusterforge-watchdog PRIVATE clusterforge_core)
+          if(MSVC)
+            target_link_options(clusterforge-worker PRIVATE /ENTRY:mainCRTStartup)
+            target_link_options(clusterforge-watchdog PRIVATE /ENTRY:mainCRTStartup)
+          endif()
+          set_target_properties(clusterforge-worker clusterforge-watchdog PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+          if(CLUSTERFORGE_BUILD_TESTS)
+            enable_testing()
+            add_executable(clusterforge-scheduler-test tests/scheduler_test.cpp)
+            target_link_libraries(clusterforge-scheduler-test PRIVATE clusterforge_core)
+            add_test(NAME scheduler COMMAND clusterforge-scheduler-test)
+            add_executable(clusterforge-process-manager-test tests/process_manager_test.cpp)
+            target_link_libraries(clusterforge-process-manager-test PRIVATE clusterforge_core)
+            add_test(NAME process_manager COMMAND clusterforge-process-manager-test)
+            add_executable(clusterforge-file-ops-test tests/file_ops_test.cpp)
+            target_link_libraries(clusterforge-file-ops-test PRIVATE clusterforge_core)
+            add_test(NAME file_ops COMMAND clusterforge-file-ops-test)
+            add_executable(clusterforge-runtime-ops-test tests/runtime_ops_test.cpp)
+            target_link_libraries(clusterforge-runtime-ops-test PRIVATE clusterforge_core)
+            add_test(NAME runtime_ops COMMAND clusterforge-runtime-ops-test)
+          endif()
+          '@ | Set-Content 'source/phase3-windows-native/CMakeLists.txt' -NoNewline
+
+          $version = Get-Content 'source/phase3-windows-native/src/common.hpp' -Raw
+          if ($version -notmatch '0\.3\.1-phase3-alpha2') { throw 'The source version is not Alpha 2.' }
+          foreach ($required in @('src/file_ops.cpp','src/runtime_ops.cpp','tests/file_ops_test.cpp','tests/runtime_ops_test.cpp')) {
+            if (-not (Test-Path (Join-Path 'source/phase3-windows-native' $required))) { throw "Missing Alpha 2 source: $required" }
+          }
+
+      - name: Build native Windows x64 payload
+        shell: pwsh
+        working-directory: source/phase3-windows-native
+        run: |
+          $env:VCPKG_ROOT = 'C:\vcpkg'
+          & "$env:VCPKG_ROOT\vcpkg.exe" install --triplet x64-windows-static --x-manifest-root="$PWD"
+          if ($LASTEXITCODE -ne 0) { throw 'vcpkg install failed.' }
+          cmake -S . -B build/windows -G "Visual Studio 17 2022" -A x64 `
+            -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake `
+            -DVCPKG_TARGET_TRIPLET=x64-windows-static `
+            -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded `
+            -DCLUSTERFORGE_BUILD_TESTS=ON
+          if ($LASTEXITCODE -ne 0) { throw 'CMake configure failed.' }
+          cmake --build build/windows --config Release --parallel
+          if ($LASTEXITCODE -ne 0) { throw 'Windows compilation failed.' }
+          ctest --test-dir build/windows -C Release --output-on-failure
+          if ($LASTEXITCODE -ne 0) { throw 'Windows tests failed.' }
+
+      - name: Verify GUI subsystem and package payload
+        shell: pwsh
+        working-directory: source/phase3-windows-native
+        run: |
+          $worker = 'build/windows/bin/Release/clusterforge-worker.exe'
+          $watchdog = 'build/windows/bin/Release/clusterforge-watchdog.exe'
+          if (-not (Test-Path $worker) -or -not (Test-Path $watchdog)) { throw 'Expected Windows EXEs were not produced.' }
+          function Get-PESubsystem([string]$Path) {
+            $bytes = [IO.File]::ReadAllBytes((Resolve-Path $Path))
+            $peOffset = [BitConverter]::ToInt32($bytes, 0x3c)
+            if ($peOffset -lt 0 -or ($peOffset + 256) -gt $bytes.Length) { throw "Invalid PE header offset: $Path" }
+            if ($bytes[$peOffset] -ne 0x50 -or $bytes[$peOffset + 1] -ne 0x45) { throw "Missing PE signature: $Path" }
+            $optionalOffset = $peOffset + 24
+            return [BitConverter]::ToUInt16($bytes, $optionalOffset + 0x44)
+          }
+          if ((Get-PESubsystem $worker) -ne 2) { throw 'Worker is not a Windows GUI-subsystem application.' }
+          if ((Get-PESubsystem $watchdog) -ne 2) { throw 'Watchdog is not a Windows GUI-subsystem application.' }
+          $out = 'release/windows-x64'
+          New-Item -ItemType Directory -Force $out | Out-Null
+          Copy-Item $worker "$out/ClusterForgeWorker.exe"
+          Copy-Item $watchdog "$out/ClusterForgeWatchdog.exe"
+          '0.3.1-phase3-alpha2' | Set-Content "$out/VERSION.txt" -NoNewline
+          Get-FileHash "$out/*.exe" -Algorithm SHA256 | Sort-Object Path | ForEach-Object {
+            "$($_.Hash.ToLowerInvariant())  $([IO.Path]::GetFileName($_.Path))"
+          } | Set-Content "$out/SHA256.txt"
+          Compress-Archive -Path "$out/*" -DestinationPath ClusterForge-Phase3-Alpha2-Windows-Payload.zip -Force
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ClusterForge-Phase3-Alpha2-Windows-Payload
+          path: source/phase3-windows-native/ClusterForge-Phase3-Alpha2-Windows-Payload.zip
+          retention-days: 7

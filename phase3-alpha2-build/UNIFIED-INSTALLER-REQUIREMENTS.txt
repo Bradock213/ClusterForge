@@ -1,0 +1,13 @@
+The Windows release must contain one user-facing setup executable.
+
+Existing installation:
+- Detect %LOCALAPPDATA%\ClusterForge\config\worker.json.
+- Preserve node_id, node_token, controller URL, settings, logs, and workload state.
+- Stop worker/watchdog, replace binaries, migrate configuration, restore autostart, restart watchdog.
+
+Fresh installation:
+- Install or reuse Tailscale.
+- Join the private tailnet using the embedded enrollment credential while it remains valid.
+- Install ClusterForge, pair automatically, configure battery hosting as enabled, register autostart, start watchdog.
+
+The same executable must be safe to run repeatedly and must not create duplicate nodes or duplicate processes.

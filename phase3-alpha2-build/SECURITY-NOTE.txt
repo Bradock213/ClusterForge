@@ -1,0 +1,1 @@
+The private enrollment credential remains embedded at the user's explicit request. This build must not print it in logs, checksums, UI, or error messages. Existing installations must not need it during upgrades.
