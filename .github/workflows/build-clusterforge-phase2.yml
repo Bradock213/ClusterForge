@@ -31,6 +31,14 @@ jobs:
           $cmake = $cmake.Replace('/SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup', '/ENTRY:mainCRTStartup')
           Set-Content -Path $cmakePath -Value $cmake -NoNewline
 
+          $workerPath = 'source/phase3-windows-native/src/worker_main.cpp'
+          $workerSource = Get-Content $workerPath -Raw
+          $workerSource = $workerSource.Replace('    const auto app_directory = std::filesystem::path(std::wstring(module_path.data(), length)).parent_path();', "    const auto bin_directory = std::filesystem::path(std::wstring(module_path.data(), length)).parent_path();`n    const auto install_root = bin_directory.parent_path();")
+          $workerSource = $workerSource.Replace('    const auto watchdog = app_directory / "ClusterForgeWatchdog.exe";', '    const auto watchdog = bin_directory / "ClusterForgeWatchdog.exe";')
+          $workerSource = $workerSource.Replace('    const auto config = app_directory / "config" / "watchdog-worker.json";', '    const auto config = install_root / "config" / "watchdog-worker.json";')
+          $workerSource = $workerSource.Replace('    const auto working = app_directory.wstring();', '    const auto working = install_root.wstring();')
+          Set-Content -Path $workerPath -Value $workerSource -NoNewline
+
       - name: Build native Windows x64 worker and watchdog
         shell: pwsh
         working-directory: source/phase3-windows-native
