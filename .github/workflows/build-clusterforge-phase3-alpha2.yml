@@ -1,4 +1,3 @@
-# Final standalone Alpha 2 CI trigger 2
 name: Build ClusterForge Phase 3 Alpha 2 Windows
 
 on:
@@ -83,9 +82,55 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Runtime manager patch failed.' }
           Pop-Location
 
+          @'
+          cmake_minimum_required(VERSION 3.24)
+          project(ClusterForgeWindowsWorker VERSION 0.3.1 LANGUAGES CXX)
+          set(CMAKE_CXX_STANDARD 20)
+          set(CMAKE_CXX_STANDARD_REQUIRED ON)
+          set(CMAKE_CXX_EXTENSIONS OFF)
+          option(CLUSTERFORGE_BUILD_TESTS "Build tests" ON)
+          find_package(Boost 1.81 REQUIRED)
+          find_package(OpenSSL REQUIRED)
+          find_package(Threads REQUIRED)
+          add_library(clusterforge_core
+            src/boost_json.cpp src/common.cpp src/file_ops.cpp src/http.cpp src/platform.cpp src/process_manager.cpp src/runtime_ops.cpp src/scheduler.cpp)
+          target_include_directories(clusterforge_core PUBLIC src ${Boost_INCLUDE_DIRS})
+          target_compile_definitions(clusterforge_core PUBLIC BOOST_JSON_NO_LIB BOOST_ERROR_CODE_HEADER_ONLY BOOST_SYSTEM_NO_LIB BOOST_ASIO_NO_DEPRECATED _WIN32_WINNT=0x0A00 NOMINMAX WIN32_LEAN_AND_MEAN)
+          target_link_libraries(clusterforge_core PUBLIC OpenSSL::SSL OpenSSL::Crypto Threads::Threads ws2_32 crypt32 iphlpapi advapi32)
+          if(MSVC)
+            target_compile_options(clusterforge_core PRIVATE /W4 /permissive- /EHsc)
+          endif()
+          add_executable(clusterforge-worker WIN32 src/worker_main.cpp)
+          add_executable(clusterforge-watchdog WIN32 src/watchdog_main.cpp)
+          target_link_libraries(clusterforge-worker PRIVATE clusterforge_core)
+          target_link_libraries(clusterforge-watchdog PRIVATE clusterforge_core)
+          if(MSVC)
+            target_link_options(clusterforge-worker PRIVATE /ENTRY:mainCRTStartup)
+            target_link_options(clusterforge-watchdog PRIVATE /ENTRY:mainCRTStartup)
+          endif()
+          set_target_properties(clusterforge-worker clusterforge-watchdog PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+          if(CLUSTERFORGE_BUILD_TESTS)
+            enable_testing()
+            add_executable(clusterforge-scheduler-test tests/scheduler_test.cpp)
+            target_link_libraries(clusterforge-scheduler-test PRIVATE clusterforge_core)
+            add_test(NAME scheduler COMMAND clusterforge-scheduler-test)
+            add_executable(clusterforge-process-manager-test tests/process_manager_test.cpp)
+            target_link_libraries(clusterforge-process-manager-test PRIVATE clusterforge_core)
+            add_test(NAME process_manager COMMAND clusterforge-process-manager-test)
+            add_executable(clusterforge-file-ops-test tests/file_ops_test.cpp)
+            target_link_libraries(clusterforge-file-ops-test PRIVATE clusterforge_core)
+            add_test(NAME file_ops COMMAND clusterforge-file-ops-test)
+            add_executable(clusterforge-runtime-ops-test tests/runtime_ops_test.cpp)
+            target_link_libraries(clusterforge-runtime-ops-test PRIVATE clusterforge_core)
+            add_test(NAME runtime_ops COMMAND clusterforge-runtime-ops-test)
+          endif()
+          '@ | Set-Content 'source/phase3-windows-native/CMakeLists.txt' -NoNewline
+
           $version = Get-Content 'source/phase3-windows-native/src/common.hpp' -Raw
           if ($version -notmatch '0\.3\.1-phase3-alpha2') { throw 'The source version is not Alpha 2.' }
-          if (-not (Test-Path 'source/phase3-windows-native/src/runtime_ops.cpp')) { throw 'Runtime manager source was not added.' }
+          foreach ($required in @('src/file_ops.cpp','src/runtime_ops.cpp','tests/file_ops_test.cpp','tests/runtime_ops_test.cpp')) {
+            if (-not (Test-Path (Join-Path 'source/phase3-windows-native' $required))) { throw "Missing Alpha 2 source: $required" }
+          }
 
       - name: Build native Windows x64 payload
         shell: pwsh
@@ -122,7 +167,6 @@ jobs:
           }
           if ((Get-PESubsystem $worker) -ne 2) { throw 'Worker is not a Windows GUI-subsystem application.' }
           if ((Get-PESubsystem $watchdog) -ne 2) { throw 'Watchdog is not a Windows GUI-subsystem application.' }
-
           $out = 'release/windows-x64'
           New-Item -ItemType Directory -Force $out | Out-Null
           Copy-Item $worker "$out/ClusterForgeWorker.exe"
