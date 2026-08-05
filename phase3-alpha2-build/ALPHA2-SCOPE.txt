@@ -1,0 +1,7 @@
+Phase 3 Alpha 2 scope:
+- Unified fresh-install/update Windows setup.
+- Java runtime discovery and selection foundation.
+- Safe workload-root file operations foundation.
+- Snapshot/checksum foundation.
+- Existing battery, watchdog, GUI-subsystem, autostart, pairing, and reconnect behavior retained.
+- Stateful cross-node game-server failover remains disabled.
