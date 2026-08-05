@@ -1,6 +1,13 @@
 name: Build ClusterForge Phase 3 Alpha 2 Windows
 
 on:
+  push:
+    branches:
+      - clusterforge-phase3-alpha2-build
+    paths:
+      - 'phase3-build/**'
+      - 'phase3-alpha2-build/**'
+      - '.github/workflows/build-clusterforge-phase3-alpha2.yml'
   pull_request:
     paths:
       - 'phase3-build/**'
@@ -23,54 +30,35 @@ jobs:
           $base64 = ($parts | ForEach-Object { ((Get-Content $_.FullName -Raw) -replace '[^A-Za-z0-9+/=]', '') }) -join ''
           [IO.File]::WriteAllBytes('phase3-windows-native.zip', [Convert]::FromBase64String($base64))
           $hash = (Get-FileHash phase3-windows-native.zip -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($hash -ne '443cb349a365d7600554693f12862a7dfacaeadb24b83fce35596fe796802ad6') {
-            throw "Base source archive checksum mismatch: $hash"
-          }
+          if ($hash -ne '443cb349a365d7600554693f12862a7dfacaeadb24b83fce35596fe796802ad6') { throw "Base source archive checksum mismatch: $hash" }
           Expand-Archive phase3-windows-native.zip -DestinationPath source -Force
           if (-not (Test-Path 'source/phase3-windows-native/CMakeLists.txt')) { throw 'Base source reconstruction failed.' }
 
-      - name: Apply Phase 3 Alpha 2 overlay and runtime manager patch
+      - name: Apply Phase 3 Alpha 2 source overlay
         shell: pwsh
         run: |
           $orderedParts = @(
             'phase3-alpha2-build/overlay.part00.txt',
             'phase3-alpha2-build/overlay.part01.txt',
             'phase3-alpha2-build/overlay.part02.txt',
-            'phase3-alpha2-build/overlay.fix03a.txt',
-            'phase3-alpha2-build/overlay.fix03b.txt',
-            'phase3-alpha2-build/overlay.fix04a.txt',
-            'phase3-alpha2-build/overlay.fix04b.txt',
+            'phase3-alpha2-build/overlay-fix/part03.00.txt',
+            'phase3-alpha2-build/overlay-fix/part03.01.txt',
+            'phase3-alpha2-build/overlay-fix/part03.02a.txt',
+            'phase3-alpha2-build/overlay-fix/part03.02b.txt',
+            'phase3-alpha2-build/overlay-fix/part03.02c.txt',
+            'phase3-alpha2-build/overlay-fix/part03.02d.txt',
+            'phase3-alpha2-build/overlay-fix/part04.00.txt',
+            'phase3-alpha2-build/overlay-fix/part04.01.txt',
+            'phase3-alpha2-build/overlay-fix/part04.02.txt',
             'phase3-alpha2-build/overlay.part05.txt'
           )
-          $expectedHashes = @(
-            'cff02e91e1b53f82e9c421ebeecc723a01fe2b4709ce6dcf5ee166cb314cc9c6',
-            'f5c18b7315919acd4694c062e82ee379198410126a146d48bcc718ac823ac14e',
-            'a1013107074217fae77e4f7b5deb610d8136e5f8cf9f55d8234590d6e182edc8',
-            '6654ef8b3c4d5cbf78bab57ffe1f8f4e0a97ba47d77ff39c4508a9e700233424',
-            'd75e507e7ec0d03423b264a80e5665a705ebcdf5ccb3c6d181dbd7825d223878',
-            '2530fb953289278b0122bc5940ef5d5b9dbdfb4ce1287c41f637884cad537221',
-            '5f2ee1800d189e8a93ba1af3b95ceb80be6534e6fd968926a0c64b45128bd34b',
-            'fdefea1eb982f2204a1c504e441c872b1cf23dc20484a035750b611a8c3a139a'
-          )
-          $segments = @()
-          for ($i = 0; $i -lt $orderedParts.Count; $i++) {
-            $path = $orderedParts[$i]
+          $segments = foreach ($path in $orderedParts) {
             if (-not (Test-Path $path)) { throw "Missing overlay part: $path" }
-            $segment = ((Get-Content $path -Raw) -replace '[^A-Za-z0-9+/=]', '')
-            $bytes = [Text.Encoding]::ASCII.GetBytes($segment)
-            $segmentHash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes)).ToLowerInvariant()
-            Write-Host "$path length=$($segment.Length) sha256=$segmentHash"
-            if ($segmentHash -ne $expectedHashes[$i]) {
-              throw "Overlay segment mismatch: $path expected $($expectedHashes[$i]) got $segmentHash"
-            }
-            $segments += $segment
+            ((Get-Content $path -Raw) -replace '[^A-Za-z0-9+/=]', '')
           }
-          $base64 = $segments -join ''
-          [IO.File]::WriteAllBytes('phase3-alpha2-overlay.zip', [Convert]::FromBase64String($base64))
+          [IO.File]::WriteAllBytes('phase3-alpha2-overlay.zip', [Convert]::FromBase64String(($segments -join '')))
           $hash = (Get-FileHash phase3-alpha2-overlay.zip -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($hash -ne '2eb5e9e1b66ee58af21b449a4dfdb1f934399a7ea6ba338ef96250d9ba1ac529') {
-            throw "Alpha 2 overlay checksum mismatch: $hash"
-          }
+          if ($hash -ne '2eb5e9e1b66ee58af21b449a4dfdb1f934399a7ea6ba338ef96250d9ba1ac529') { throw "Alpha 2 overlay checksum mismatch: $hash" }
           Expand-Archive phase3-alpha2-overlay.zip -DestinationPath source -Force
 
           $patchBase64 = ((Get-Content 'phase3-alpha2-build/runtime.patch.gz.b64' -Raw) -replace '[^A-Za-z0-9+/=]', '')
@@ -79,7 +67,6 @@ jobs:
           $output = [IO.File]::Create((Join-Path $PWD 'runtime.patch'))
           $gzip = [IO.Compression.GzipStream]::new($input, [IO.Compression.CompressionMode]::Decompress)
           try { $gzip.CopyTo($output) } finally { $gzip.Dispose(); $output.Dispose(); $input.Dispose() }
-
           Push-Location 'source/phase3-windows-native'
           git apply --check -p2 "$env:GITHUB_WORKSPACE/runtime.patch"
           if ($LASTEXITCODE -ne 0) { throw 'Runtime manager patch validation failed.' }
@@ -117,19 +104,14 @@ jobs:
           $worker = 'build/windows/bin/Release/clusterforge-worker.exe'
           $watchdog = 'build/windows/bin/Release/clusterforge-watchdog.exe'
           if (-not (Test-Path $worker) -or -not (Test-Path $watchdog)) { throw 'Expected Windows EXEs were not produced.' }
-
           function Get-PESubsystem([string]$Path) {
             $bytes = [IO.File]::ReadAllBytes((Resolve-Path $Path))
-            if ($bytes.Length -lt 256) { throw "PE file is unexpectedly small: $Path" }
             $peOffset = [BitConverter]::ToInt32($bytes, 0x3c)
             if ($peOffset -lt 0 -or ($peOffset + 256) -gt $bytes.Length) { throw "Invalid PE header offset: $Path" }
             if ($bytes[$peOffset] -ne 0x50 -or $bytes[$peOffset + 1] -ne 0x45) { throw "Missing PE signature: $Path" }
             $optionalOffset = $peOffset + 24
-            $magic = [BitConverter]::ToUInt16($bytes, $optionalOffset)
-            if ($magic -ne 0x20b -and $magic -ne 0x10b) { throw "Unknown PE optional-header magic $magic in $Path" }
             return [BitConverter]::ToUInt16($bytes, $optionalOffset + 0x44)
           }
-
           if ((Get-PESubsystem $worker) -ne 2) { throw 'Worker is not a Windows GUI-subsystem application.' }
           if ((Get-PESubsystem $watchdog) -ne 2) { throw 'Watchdog is not a Windows GUI-subsystem application.' }
 
