@@ -1,3 +1,3 @@
 # ClusterForge Build Workspace
 
-Temporary private build workspace for compiling ClusterForge Phase 1 Windows and Linux release binaries.
+Temporary private build, if you want to use it edit the code to your liking.
