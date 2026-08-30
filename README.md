@@ -10,7 +10,7 @@
 ![Stage](https://img.shields.io/badge/stage-MVP-orange)
 ![Platforms](https://img.shields.io/badge/nodes-Windows%20%7C%20Linux-blue)
 
-[Download MVP](https://github.com/Bradock213/ClusterForge/releases/tag/v0.1.0-mvp) · [Roadmap](ROADMAP.md) · [Architecture](docs/ARCHITECTURE.md) · [Security](SECURITY.md) · [Contributing](CONTRIBUTING.md)
+[Download MVP](https://github.com/Bradock213/ClusterForge/releases/tag/v0.1.0-mvp) · [Roadmap](ROADMAP.md) · [Architecture](docs/ARCHITECTURE.md) · [Changelog](CHANGELOG.md) · [Security](SECURITY.md) · [Contributing](CONTRIBUTING.md)
 
 </div>
 
@@ -115,6 +115,7 @@ windows-build/       Native Windows worker build inputs
 docs/                Architecture and project documentation
 README.md             Project overview and positioning
 ROADMAP.md            Public development direction
+CHANGELOG.md          Public release history
 SECURITY.md           Security reporting guidance
 CONTRIBUTING.md       Contribution workflow
 ```
