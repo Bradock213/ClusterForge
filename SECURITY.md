@@ -1,6 +1,16 @@
 # Security Policy
 
-ClusterForge is currently an early-stage MVP. Security reports are still welcome and should be handled carefully because the project coordinates remote machines and workloads.
+ClusterForge is currently an early-stage MVP. Security reports are welcome and should be handled carefully because the project coordinates remote machines and workloads.
+
+## Supported versions
+
+| Version | Security status |
+|---|---|
+| Latest MVP/pre-release | Best-effort security fixes |
+| Older MVP builds | Upgrade to the newest available build |
+| Stable release line | Not available yet |
+
+ClusterForge has not reached a long-term-support release line. A security fix may require upgrading to a newer MVP build instead of receiving a backport.
 
 ## Reporting a security issue
 
@@ -10,12 +20,25 @@ Until a dedicated private disclosure channel is published, contact the repositor
 
 A useful report should include:
 
-- affected component or version
+- affected component and version/commit
 - environment and operating system
 - clear reproduction steps
 - expected versus observed behavior
 - realistic impact
 - suggested mitigation, if known
+
+## Security-sensitive areas
+
+Extra care is appropriate around:
+
+- controller/worker authentication and pairing
+- workload command delivery
+- remote process execution
+- file transfer and provisioning
+- credentials and API tokens
+- updater/install/uninstall behavior
+- watchdog/recovery behavior
+- network exposure and access control
 
 ## Sensitive data
 
@@ -26,13 +49,13 @@ Never commit or publish:
 - node pairing secrets
 - private SSH keys
 - cloud credentials
-- private network details that are not required for a public report
+- unnecessary private network details
 - production logs containing secrets or personal data
 
-## Supported versions
+## Public release scope
 
-ClusterForge has not reached a stable release line yet. The current public MVP is experimental and security fixes may require upgrading to the newest available build rather than receiving long-term patches for older MVP builds.
+The public `v0.1.0-mvp` release contains the Windows x86-64 worker/watchdog package. Other parts of the platform remain under active development and may not yet have a stable public support policy.
 
-## Scope
+## Release verification
 
-The public `v0.1.0-mvp` release includes the Windows x86-64 worker/watchdog package. Other parts of the platform remain under active development and may not yet have a stable public support policy.
+Public binary releases should be built through repository CI and include SHA-256 verification material. See [docs/RELEASES.md](docs/RELEASES.md) for the release policy.
