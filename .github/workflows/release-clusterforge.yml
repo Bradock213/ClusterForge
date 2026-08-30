@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Release version (for example 0.1.0)"
+        description: "Release version (for example 0.2.0-mvp or 1.0.0)"
         required: true
         type: string
       prerelease:
@@ -29,8 +29,9 @@ jobs:
         run: |
           $version = '${{ inputs.version }}'
           if ($version -notmatch '^\d+\.\d+\.\d+([-.][0-9A-Za-z.-]+)?$') {
-            throw "Version must look like 0.1.0 or 0.1.0-mvp"
+            throw "Version must look like 0.2.0-mvp or 1.0.0"
           }
+          "RELEASE_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append
           "RELEASE_TAG=v$version" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Reconstruct compact source
@@ -66,7 +67,7 @@ jobs:
           if ($d.HasExited) { throw "Watchdog exited unexpectedly: $($d.ExitCode)" }
           Stop-Process -Id $d.Id -Force
 
-      - name: Package release
+      - name: Package release and checksums
         shell: pwsh
         run: |
           $out='release/ClusterForge-Windows-Worker-x64'
@@ -76,8 +77,59 @@ jobs:
           Copy-Item build-src/windows-native/install-worker.ps1 $out/
           Copy-Item build-src/windows-native/uninstall-worker.ps1 $out/
           Copy-Item build-src/windows-native/TESTING.txt $out/
-          Get-FileHash "$out/*.exe" -Algorithm SHA256 | ForEach-Object { "$($_.Hash)  $([IO.Path]::GetFileName($_.Path))" } | Set-Content "$out/SHA256.txt"
+
+          Get-FileHash "$out/*.exe" -Algorithm SHA256 |
+            ForEach-Object { "$($_.Hash)  $([IO.Path]::GetFileName($_.Path))" } |
+            Set-Content "$out/SHA256.txt"
+
           Compress-Archive -Path "$out/*" -DestinationPath ClusterForge-Windows-Worker-x64.zip -Force
+
+          $zipHash = (Get-FileHash 'ClusterForge-Windows-Worker-x64.zip' -Algorithm SHA256).Hash
+          "$zipHash  ClusterForge-Windows-Worker-x64.zip" | Set-Content SHA256SUMS.txt
+
+      - name: Generate release page
+        shell: pwsh
+        run: |
+          $body = @"
+          # ClusterForge $env:RELEASE_TAG
+
+          Versioned release of the **ClusterForge Windows x86-64 worker/watchdog package**.
+
+          > **Channel:** $([bool]::Parse('${{ inputs.prerelease }}') ? 'Pre-release' : 'Stable release')  
+          > **Target:** Windows x86-64  
+          > **Build:** GitHub Actions compiled and smoke-tested
+
+          ## Assets
+
+          - `ClusterForge-Windows-Worker-x64.zip` — worker, watchdog, install/uninstall scripts, testing notes and executable hashes
+          - `SHA256SUMS.txt` — SHA-256 hash for the downloadable ZIP
+
+          ## Verification
+
+          The workflow reconstructs the native source, compiles both executables, runs smoke tests and creates checksums before publishing this release.
+
+          Verify the downloaded ZIP with:
+
+          ```powershell
+          Get-FileHash .\ClusterForge-Windows-Worker-x64.zip -Algorithm SHA256
+          ```
+
+          Compare the result with `SHA256SUMS.txt` from this release.
+
+          ## Documentation
+
+          - [Project overview](https://github.com/$env:GITHUB_REPOSITORY#readme)
+          - [Architecture](https://github.com/$env:GITHUB_REPOSITORY/blob/main/docs/ARCHITECTURE.md)
+          - [Roadmap](https://github.com/$env:GITHUB_REPOSITORY/blob/main/ROADMAP.md)
+          - [Changelog](https://github.com/$env:GITHUB_REPOSITORY/blob/main/CHANGELOG.md)
+          - [Security policy](https://github.com/$env:GITHUB_REPOSITORY/blob/main/SECURITY.md)
+          - [Release policy](https://github.com/$env:GITHUB_REPOSITORY/blob/main/docs/RELEASES.md)
+
+          ## Status
+
+          ClusterForge remains under active development. Pre-release versions may change interfaces, deployment procedures and internal formats.
+          "@
+          Set-Content -Path RELEASE_BODY.md -Value $body
 
       - name: Create GitHub release
         shell: pwsh
@@ -87,9 +139,10 @@ jobs:
           $args = @(
             'release', 'create', $env:RELEASE_TAG,
             'ClusterForge-Windows-Worker-x64.zip',
+            'SHA256SUMS.txt',
             '--target', $env:GITHUB_SHA,
             '--title', "ClusterForge $env:RELEASE_TAG",
-            '--generate-notes'
+            '--notes-file', 'RELEASE_BODY.md'
           )
           if ('${{ inputs.prerelease }}' -eq 'true') { $args += '--prerelease' }
           gh @args
