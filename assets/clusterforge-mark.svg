@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">ClusterForge mark</title>
+  <desc id="desc">Geometric distributed-node mark surrounding a forge core.</desc>
+  <rect width="512" height="512" rx="96" fill="#0b1220"/>
+
+  <g transform="translate(96 78)">
+    <g stroke="#64748b" stroke-width="18" stroke-linecap="round">
+      <line x1="160" y1="42" x2="160" y2="106"/>
+      <line x1="50" y1="105" x2="107" y2="138"/>
+      <line x1="270" y1="105" x2="213" y2="138"/>
+      <line x1="50" y1="235" x2="107" y2="202"/>
+      <line x1="270" y1="235" x2="213" y2="202"/>
+      <line x1="160" y1="298" x2="160" y2="234"/>
+    </g>
+
+    <g fill="#cbd5e1" stroke="#94a3b8" stroke-width="4">
+      <path d="M160 0 205 26v52l-45 26-45-26V26Z"/>
+      <path d="M0 78 45 104v52L0 182l-45-26v-52Z" transform="translate(50 0)"/>
+      <path d="M0 78 45 104v52L0 182l-45-26v-52Z" transform="translate(270 0)"/>
+      <path d="M0 208 45 234v52L0 312l-45-26v-52Z" transform="translate(50 0)"/>
+      <path d="M0 208 45 234v52L0 312l-45-26v-52Z" transform="translate(270 0)"/>
+      <path d="M160 260 205 286v52l-45 26-45-26v-52Z"/>
+    </g>
+
+    <g transform="translate(94 112)">
+      <path d="M66 0 132 38v76l-66 38L0 114V38Z" fill="#f97316"/>
+      <path d="M66 27 108 51v50l-42 24-42-24V51Z" fill="#0b1220"/>
+      <path d="M66 -6v48" stroke="#fb923c" stroke-width="20" stroke-linecap="round"/>
+      <path d="M47 -21h38l-5 24H52Z" fill="#fdba74"/>
+    </g>
+  </g>
+</svg>
