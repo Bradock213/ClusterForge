@@ -2,12 +2,15 @@
 
 ClusterForge is currently a solo-developed MVP. Contributions are welcome when they are focused, reviewable and easy to verify.
 
+By submitting a contribution for inclusion in ClusterForge, you agree that it may be distributed under the repository's **Apache License 2.0**.
+
 ## Before opening a pull request
 
 1. Check existing issues and pull requests to avoid duplicating work.
 2. For larger changes, open a feature request first and describe the problem you want to solve.
 3. Keep changes scoped to one clear purpose.
 4. Never include credentials, API keys, private infrastructure data or pairing secrets.
+5. Follow the expectations in [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
 
 ## Bug reports
 
@@ -39,6 +42,10 @@ Pull requests should:
 The repository includes GitHub Actions that reconstruct and build the native Windows worker/watchdog package, run smoke tests and package the output.
 
 A pull request that changes the Windows worker build inputs should leave this workflow green before merge.
+
+## Releases
+
+Changes intended for a public release should follow [docs/RELEASES.md](docs/RELEASES.md). Public binary releases should have an automated build, tests, checksums, platform scope and release notes.
 
 ## Project direction
 

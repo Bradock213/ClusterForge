@@ -1,0 +1,15 @@
+# Default owner for ClusterForge changes
+* @Bradock213
+
+# CI and release automation
+/.github/ @Bradock213
+
+# Public documentation
+/docs/ @Bradock213
+/README.md @Bradock213
+/ROADMAP.md @Bradock213
+/CHANGELOG.md @Bradock213
+/SECURITY.md @Bradock213
+
+# Native Windows build inputs
+/windows-build/ @Bradock213

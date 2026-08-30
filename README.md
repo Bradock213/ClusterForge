@@ -1,28 +1,33 @@
-# ClusterForge
-
 <div align="center">
 
-**Distributed compute orchestration for heterogeneous Windows and Linux nodes.**
+<img src="assets/clusterforge-logo.svg" alt="ClusterForge — Distributed Compute Orchestration" width="820" />
+
+<br />
+
+**A lightweight control plane for coordinating heterogeneous Windows and Linux compute nodes.**
 
 [![Build](https://github.com/Bradock213/ClusterForge/actions/workflows/build-clusterforge.yml/badge.svg)](https://github.com/Bradock213/ClusterForge/actions/workflows/build-clusterforge.yml)
 [![Release](https://img.shields.io/github/v/release/Bradock213/ClusterForge?include_prereleases&label=release)](https://github.com/Bradock213/ClusterForge/releases)
 [![Downloads](https://img.shields.io/github/downloads/Bradock213/ClusterForge/total)](https://github.com/Bradock213/ClusterForge/releases)
-![Stage](https://img.shields.io/badge/stage-MVP-orange)
-![Platforms](https://img.shields.io/badge/nodes-Windows%20%7C%20Linux-blue)
+[![License](https://img.shields.io/github/license/Bradock213/ClusterForge?label=license)](LICENSE)
+![Stage](https://img.shields.io/badge/stage-MVP-f97316)
+![Platforms](https://img.shields.io/badge/nodes-Windows%20%7C%20Linux-2563eb)
 
-[Download MVP](https://github.com/Bradock213/ClusterForge/releases/tag/v0.1.0-mvp) · [Roadmap](ROADMAP.md) · [Architecture](docs/ARCHITECTURE.md) · [Changelog](CHANGELOG.md) · [Security](SECURITY.md) · [Contributing](CONTRIBUTING.md)
+[**Download MVP**](https://github.com/Bradock213/ClusterForge/releases/tag/v0.1.0-mvp) · [Roadmap](ROADMAP.md) · [Architecture](docs/ARCHITECTURE.md) · [Release policy](docs/RELEASES.md) · [Changelog](CHANGELOG.md) · [Security](SECURITY.md) · [Support](SUPPORT.md)
 
 </div>
 
-ClusterForge is a solo-developed control plane for coordinating distributed compute resources across heterogeneous machines. It combines a central controller, browser-based dashboard, workers/agents and watchdog processes to provision, monitor and operate workloads from one place.
+---
 
-The project is currently an **active MVP**. Current development focuses on reliable orchestration, resource-aware scheduling, recovery, automation and a foundation for AI/compute workloads.
+ClusterForge is a solo-developed distributed-compute orchestration project for turning mixed machines into one manageable pool. A central controller, browser-based dashboard, workers/agents and watchdog processes coordinate workloads across heterogeneous nodes while exposing health, resource and lifecycle information from one place.
 
-> **Current public release:** `v0.1.0-mvp` contains the native Windows x86-64 worker/watchdog package. The complete platform is still being hardened and documented for broader use.
+The project is currently an **active MVP**. Development is focused on reliable orchestration, resource-aware scheduling, recovery, automation, multi-node operation and a foundation for broader AI/compute workloads.
+
+> **Current public release:** `v0.1.0-mvp` provides the native Windows x86-64 worker/watchdog package. It is automatically compiled, smoke-tested, checksummed and published by GitHub Actions.
 
 ## Why ClusterForge?
 
-ClusterForge is aimed at a different gap than container-only platforms or Python-only distributed runtimes: coordinating ordinary heterogeneous computers and generic workloads through one lightweight control plane.
+Many orchestration systems begin with containers, Kubernetes primitives or a language-specific distributed runtime. ClusterForge is being designed around a different starting point: **ordinary heterogeneous computers and generic workloads**.
 
 | Focus | ClusterForge approach |
 |---|---|
@@ -70,25 +75,46 @@ The controller acts as the control plane. Workers connect to it, report capabili
 
 More detail: **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**
 
-## Quick start: public Windows worker MVP
+## Quick start: Windows worker MVP
 
-The current public release is the Windows worker/watchdog package rather than the full production platform.
+The current public binary package focuses on the Windows worker/watchdog component rather than a complete production distribution.
 
-1. Download `ClusterForge-Windows-Worker-x64.zip` from the [v0.1.0-mvp release](https://github.com/Bradock213/ClusterForge/releases/tag/v0.1.0-mvp).
-2. Extract the archive on a Windows x86-64 machine.
-3. Read the included `TESTING.txt` before installation.
-4. Review `install-worker.ps1` before running it and use the package only in an environment you control.
-5. Verify the included `SHA256.txt` checksums when testing release binaries.
+1. Download `ClusterForge-Windows-Worker-x64.zip` from **[v0.1.0-mvp](https://github.com/Bradock213/ClusterForge/releases/tag/v0.1.0-mvp)**.
+2. Extract the archive on a Windows x86-64 machine you control.
+3. Read the bundled `TESTING.txt`.
+4. Review `install-worker.ps1` before executing it.
+5. Verify the included SHA-256 hashes before testing the binaries.
 
-The release is built automatically in GitHub Actions. The pipeline reconstructs the native source, compiles the worker and watchdog, runs smoke tests, generates checksums and packages the result.
+For future releases, the release page also publishes a checksum file for the downloadable package itself.
+
+## Verified release pipeline
+
+Every versioned Windows worker release goes through the same automated path:
+
+```text
+Build input
+   │
+   ├─ reconstruct native source
+   ├─ configure + compile x86-64 binaries
+   ├─ smoke-test worker
+   ├─ smoke-test watchdog
+   ├─ generate executable SHA-256 hashes
+   ├─ package release ZIP
+   ├─ generate package SHA-256 hash
+   └─ publish GitHub Release
+```
+
+This keeps release artifacts separate from development-only workflow outputs and gives every public package a documented target, checksum and release status.
+
+See **[docs/RELEASES.md](docs/RELEASES.md)** for the versioning and release policy.
 
 ## Where ClusterForge fits
 
-ClusterForge does **not** claim to replace mature projects such as Kubernetes/K3s, HashiCorp Nomad or Ray today. Those projects solve adjacent problems at much greater production maturity.
+ClusterForge does **not** claim production parity with mature projects such as Kubernetes/K3s, HashiCorp Nomad or Ray. Those platforms solve adjacent problems at significantly greater scale and maturity.
 
-ClusterForge is being developed around a narrower goal: **make mixed Windows/Linux machines easier to turn into one manageable pool for generic, automated and compute-oriented workloads without requiring every workload to start as a Kubernetes deployment or Python application.**
+ClusterForge is deliberately narrower today: **make mixed Windows/Linux machines easier to operate as one manageable compute pool without requiring every workload to begin as a Kubernetes deployment or Python application.**
 
-That positioning keeps the project focused while the MVP grows toward stronger container support, AI scheduling, cloud deployment and multi-node reliability.
+That focus leaves room for container support, AI scheduling and cloud deployment while keeping the control plane approachable for heterogeneous self-hosted infrastructure.
 
 ## Development status
 
@@ -109,22 +135,38 @@ That positioning keeps the project focused while the MVP grows toward stronger c
 ## Repository layout
 
 ```text
-.github/workflows/   CI, smoke-test and release automation
+.github/             CI, release automation, ownership and community templates
+assets/              ClusterForge brand assets
 build-input/         Compact ClusterForge build inputs
 windows-build/       Native Windows worker build inputs
-docs/                Architecture and project documentation
+docs/                Architecture and release documentation
+release-notes/       Curated release-page content
 README.md             Project overview and positioning
 ROADMAP.md            Public development direction
 CHANGELOG.md          Public release history
 SECURITY.md           Security reporting guidance
+SUPPORT.md            Support expectations
 CONTRIBUTING.md       Contribution workflow
+LICENSE               Apache License 2.0
+NOTICE                Project attribution notice
 ```
 
-## Releases and CI
+## Releases
 
-Every Windows worker build reconstructs the compact native source, compiles `ClusterForgeWorker.exe` and `ClusterForgeWatchdog.exe`, runs smoke tests and packages the result. Versioned releases additionally publish the ZIP through GitHub Releases.
+### `v0.1.0-mvp`
 
-Current release: **[ClusterForge v0.1.0-mvp](https://github.com/Bradock213/ClusterForge/releases/tag/v0.1.0-mvp)**
+First public Windows x86-64 worker/watchdog package.
+
+**Includes:**
+- native worker executable
+- watchdog executable
+- install/uninstall PowerShell helpers
+- testing notes
+- SHA-256 executable checksums
+
+**Release:** [ClusterForge v0.1.0-mvp](https://github.com/Bradock213/ClusterForge/releases/tag/v0.1.0-mvp)
+
+Future releases use structured release pages, downloadable package checksums and the release policy documented in [docs/RELEASES.md](docs/RELEASES.md).
 
 ## Roadmap
 
@@ -136,18 +178,32 @@ Near-term priorities include:
 - improved synchronization and failover behavior
 - containerized workload support
 - AI/compute workload orchestration
-- clearer public documentation and versioned releases
+- broader platform build/test coverage
 
 See **[ROADMAP.md](ROADMAP.md)** for the longer development direction.
 
-## Contributing
+## Contributing and support
 
-ClusterForge is currently a solo-developed MVP, but focused bug reports, reproducible test results and clearly scoped contributions are welcome. See **[CONTRIBUTING.md](CONTRIBUTING.md)**.
+Focused bug reports, reproducible test results and clearly scoped contributions are welcome.
+
+- [Contributing guide](CONTRIBUTING.md)
+- [Support policy](SUPPORT.md)
+- [Issue tracker](https://github.com/Bradock213/ClusterForge/issues)
 
 ## Security
 
-Do not publish credentials, API keys, pairing secrets or private infrastructure information in issues or commits. See **[SECURITY.md](SECURITY.md)** for reporting guidance.
+Do not publish credentials, API keys, pairing secrets or private infrastructure information in issues or commits. Follow **[SECURITY.md](SECURITY.md)** for security reporting guidance.
+
+## License
+
+ClusterForge is available under the **[Apache License 2.0](LICENSE)**. The license permits use, modification and distribution while including an explicit patent grant and preserving required notices.
 
 ---
 
+<div align="center">
+
+<img src="assets/clusterforge-mark.svg" alt="ClusterForge mark" width="92" />
+
 **ClusterForge is under active development. APIs, deployment procedures and internal formats may change before a stable release.**
+
+</div>

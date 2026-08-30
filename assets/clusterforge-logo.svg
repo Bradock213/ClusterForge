@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="320" viewBox="0 0 1200 320" role="img" aria-labelledby="title desc">
+  <title id="title">ClusterForge</title>
+  <desc id="desc">ClusterForge logo with a geometric distributed-node mark and wordmark.</desc>
+  <rect width="1200" height="320" rx="32" fill="#0b1220"/>
+
+  <g transform="translate(76 48)">
+    <g stroke="#64748b" stroke-width="12" stroke-linecap="round">
+      <line x1="112" y1="34" x2="112" y2="78"/>
+      <line x1="36" y1="78" x2="75" y2="101"/>
+      <line x1="188" y1="78" x2="149" y2="101"/>
+      <line x1="36" y1="168" x2="75" y2="145"/>
+      <line x1="188" y1="168" x2="149" y2="145"/>
+      <line x1="112" y1="212" x2="112" y2="168"/>
+    </g>
+
+    <g fill="#cbd5e1" stroke="#94a3b8" stroke-width="3">
+      <path d="M112 0 142 17v34l-30 17-30-17V17Z"/>
+      <path d="M16 54 46 71v34l-30 17-30-17V71Z" transform="translate(0 0)"/>
+      <path d="M208 54 238 71v34l-30 17-30-17V71Z" transform="translate(-16 0)"/>
+      <path d="M16 144 46 161v34l-30 17-30-17v-34Z" transform="translate(0 0)"/>
+      <path d="M208 144 238 161v34l-30 17-30-17v-34Z" transform="translate(-16 0)"/>
+      <path d="M112 198 142 215v34l-30 17-30-17v-34Z"/>
+    </g>
+
+    <g transform="translate(64 76)">
+      <path d="M48 0 96 27v54l-48 27L0 81V27Z" fill="#f97316"/>
+      <path d="M48 20 78 37v34L48 88 18 71V37Z" fill="#0b1220"/>
+      <path d="M48 0v30" stroke="#fb923c" stroke-width="14" stroke-linecap="round"/>
+      <path d="M35 -8h26l-3 17H38Z" fill="#fdba74"/>
+    </g>
+  </g>
+
+  <g font-family="Inter, Segoe UI, Arial, sans-serif" font-weight="700" font-size="124" letter-spacing="-4">
+    <text x="390" y="198" fill="#f8fafc">Cluster</text>
+    <text x="815" y="198" fill="#f97316">Forge</text>
+  </g>
+  <text x="398" y="244" fill="#94a3b8" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="28" letter-spacing="4">DISTRIBUTED COMPUTE ORCHESTRATION</text>
+</svg>
