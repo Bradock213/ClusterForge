@@ -18,12 +18,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Update v0.1.0-mvp release notes
+      - name: Refresh v0.1.0-mvp release page
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          set -euo pipefail
+
           gh release edit v0.1.0-mvp \
             --repo "$GITHUB_REPOSITORY" \
             --title "ClusterForge v0.1.0-mvp" \
             --notes-file release-notes/v0.1.0-mvp.md \
             --prerelease
+
+          rm -f ClusterForge-Windows-Worker-x64.zip SHA256SUMS.txt
+          gh release download v0.1.0-mvp \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern 'ClusterForge-Windows-Worker-x64.zip'
+
+          sha256sum ClusterForge-Windows-Worker-x64.zip > SHA256SUMS.txt
+
+          gh release upload v0.1.0-mvp SHA256SUMS.txt \
+            --repo "$GITHUB_REPOSITORY" \
+            --clobber
