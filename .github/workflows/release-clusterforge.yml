@@ -1,0 +1,95 @@
+name: Release ClusterForge Windows Worker
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (for example 0.1.0)"
+        required: true
+        type: string
+      prerelease:
+        description: "Mark as pre-release"
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  release-windows-x64:
+    runs-on: windows-2025
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate version
+        shell: pwsh
+        run: |
+          $version = '${{ inputs.version }}'
+          if ($version -notmatch '^\d+\.\d+\.\d+([-.][0-9A-Za-z.-]+)?$') {
+            throw "Version must look like 0.1.0 or 0.1.0-mvp"
+          }
+          "RELEASE_TAG=v$version" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Reconstruct compact source
+        shell: pwsh
+        run: |
+          $parts = Get-ChildItem windows-build/native.part*.txt | Sort-Object Name
+          if ($parts.Count -ne 2) { throw "Expected 2 source parts, got $($parts.Count)" }
+          $base64 = ($parts | ForEach-Object { (Get-Content $_.FullName -Raw).Trim() }) -join ''
+          [IO.File]::WriteAllBytes('windows-native.zip', [Convert]::FromBase64String($base64))
+          Expand-Archive windows-native.zip -DestinationPath build-src -Force
+          if (-not (Test-Path 'build-src/windows-native/CMakeLists.txt')) { throw 'Source reconstruction failed.' }
+
+      - name: Configure and build native Windows x64 EXEs
+        shell: pwsh
+        run: |
+          cmake -S build-src/windows-native -B build/windows-x64 -G "Visual Studio 17 2022" -A x64
+          if ($LASTEXITCODE -ne 0) { throw 'CMake configure failed.' }
+          cmake --build build/windows-x64 --config Release --parallel
+          if ($LASTEXITCODE -ne 0) { throw 'Windows compilation failed.' }
+          $worker = 'build/windows-x64/Release/ClusterForgeWorker.exe'
+          $watchdog = 'build/windows-x64/Release/ClusterForgeWatchdog.exe'
+          if (-not (Test-Path $worker) -or -not (Test-Path $watchdog)) { throw 'Expected EXEs were not produced.' }
+
+      - name: Smoke test binaries
+        shell: pwsh
+        run: |
+          $worker = Resolve-Path 'build/windows-x64/Release/ClusterForgeWorker.exe'
+          $watchdog = Resolve-Path 'build/windows-x64/Release/ClusterForgeWatchdog.exe'
+          $w = Start-Process $worker -ArgumentList '--stop' -PassThru -Wait
+          if ($w.ExitCode -notin @(0,2)) { throw "Worker smoke test failed: $($w.ExitCode)" }
+          $d = Start-Process $watchdog -ArgumentList '--target', 'Z:\definitely-missing.exe', '--delay', '1' -PassThru
+          Start-Sleep -Seconds 2
+          if ($d.HasExited) { throw "Watchdog exited unexpectedly: $($d.ExitCode)" }
+          Stop-Process -Id $d.Id -Force
+
+      - name: Package release
+        shell: pwsh
+        run: |
+          $out='release/ClusterForge-Windows-Worker-x64'
+          New-Item -ItemType Directory -Force $out | Out-Null
+          Copy-Item build/windows-x64/Release/ClusterForgeWorker.exe $out/
+          Copy-Item build/windows-x64/Release/ClusterForgeWatchdog.exe $out/
+          Copy-Item build-src/windows-native/install-worker.ps1 $out/
+          Copy-Item build-src/windows-native/uninstall-worker.ps1 $out/
+          Copy-Item build-src/windows-native/TESTING.txt $out/
+          Get-FileHash "$out/*.exe" -Algorithm SHA256 | ForEach-Object { "$($_.Hash)  $([IO.Path]::GetFileName($_.Path))" } | Set-Content "$out/SHA256.txt"
+          Compress-Archive -Path "$out/*" -DestinationPath ClusterForge-Windows-Worker-x64.zip -Force
+
+      - name: Create GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $args = @(
+            'release', 'create', $env:RELEASE_TAG,
+            'ClusterForge-Windows-Worker-x64.zip',
+            '--target', $env:GITHUB_SHA,
+            '--title', "ClusterForge $env:RELEASE_TAG",
+            '--generate-notes'
+          )
+          if ('${{ inputs.prerelease }}' -eq 'true') { $args += '--prerelease' }
+          gh @args
