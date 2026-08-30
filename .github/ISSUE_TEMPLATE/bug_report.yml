@@ -1,0 +1,87 @@
+name: Bug report
+description: Report a reproducible ClusterForge problem
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve ClusterForge. Do not include passwords, API keys, pairing secrets or other sensitive data.
+
+  - type: input
+    id: version
+    attributes:
+      label: ClusterForge version / commit
+      description: Release tag or commit SHA where possible.
+      placeholder: v0.1.0-mvp
+    validations:
+      required: true
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - Windows worker
+        - Watchdog
+        - Controller
+        - Web dashboard
+        - Linux worker / node
+        - Scheduling / workload lifecycle
+        - Build / CI / packaging
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, architecture and any relevant runtime details.
+      placeholder: Windows 11 x64 / Linux x86-64
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant sanitized logs
+      description: Remove credentials, tokens, private addresses and other secrets before posting.
+      render: shell
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues and pull requests first.
+          required: true
+        - label: I removed credentials, pairing secrets and other sensitive information.
+          required: true
+        - label: This is not a security vulnerability that should be reported privately under SECURITY.md.
+          required: true

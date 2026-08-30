@@ -1,0 +1,61 @@
+name: Feature request
+description: Propose a focused improvement to ClusterForge
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Describe the problem first, then the proposed solution. Please review ROADMAP.md before proposing large architectural changes.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+      description: What limitation or workflow problem are you trying to address?
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: Describe the smallest useful change that would solve the problem.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Controller
+        - Web dashboard
+        - Windows worker
+        - Linux worker / node
+        - Scheduling
+        - Reliability / failover
+        - Observability
+        - Containers
+        - AI / compute workloads
+        - Build / packaging / deployment
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Optional. What existing workaround or alternative did you consider?
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues and pull requests first.
+          required: true
+        - label: I reviewed ROADMAP.md for related planned work.
+          required: true
