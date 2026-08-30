@@ -1,21 +1,37 @@
-name: Build ClusterForge Windows Worker
+name: Release ClusterForge Windows Worker
 
 on:
-  push:
-    branches:
-      - main
-  pull_request:
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (for example 0.1.0)"
+        required: true
+        type: string
+      prerelease:
+        description: "Mark as pre-release"
+        required: true
+        default: true
+        type: boolean
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  windows-x64:
+  release-windows-x64:
     runs-on: windows-2025
     timeout-minutes: 20
+
     steps:
       - uses: actions/checkout@v4
+
+      - name: Validate version
+        shell: pwsh
+        run: |
+          $version = '${{ inputs.version }}'
+          if ($version -notmatch '^\d+\.\d+\.\d+([-.][0-9A-Za-z.-]+)?$') {
+            throw "Version must look like 0.1.0 or 0.1.0-mvp"
+          }
+          "RELEASE_TAG=v$version" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Reconstruct compact source
         shell: pwsh
@@ -63,8 +79,17 @@ jobs:
           Get-FileHash "$out/*.exe" -Algorithm SHA256 | ForEach-Object { "$($_.Hash)  $([IO.Path]::GetFileName($_.Path))" } | Set-Content "$out/SHA256.txt"
           Compress-Archive -Path "$out/*" -DestinationPath ClusterForge-Windows-Worker-x64.zip -Force
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ClusterForge-Windows-Worker-x64
-          path: ClusterForge-Windows-Worker-x64.zip
-          retention-days: 7
+      - name: Create GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $args = @(
+            'release', 'create', $env:RELEASE_TAG,
+            'ClusterForge-Windows-Worker-x64.zip',
+            '--target', $env:GITHUB_SHA,
+            '--title', "ClusterForge $env:RELEASE_TAG",
+            '--generate-notes'
+          )
+          if ('${{ inputs.prerelease }}' -eq 'true') { $args += '--prerelease' }
+          gh @args
