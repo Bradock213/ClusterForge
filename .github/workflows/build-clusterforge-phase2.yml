@@ -1,0 +1,91 @@
+name: Build ClusterForge Phase 2 Windows Installer
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  windows-x64:
+    runs-on: windows-2022
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Reconstruct Phase 2 source
+        shell: pwsh
+        run: |
+          $parts = Get-ChildItem phase2-build/source.part*.txt | Sort-Object Name
+          if ($parts.Count -ne 4) { throw "Expected 4 source parts, got $($parts.Count)" }
+          $base64 = ($parts | ForEach-Object { (Get-Content $_.FullName -Raw).Trim() }) -join ''
+          [IO.File]::WriteAllBytes('phase2-source.zip', [Convert]::FromBase64String($base64))
+          Expand-Archive phase2-source.zip -DestinationPath source -Force
+          if (-not (Test-Path 'source/ClusterForge_Phase2/CMakeLists.txt')) { throw 'Source reconstruction failed.' }
+          New-Item -ItemType Directory -Force 'source/ClusterForge_Phase2/tests' | Out-Null
+          Copy-Item 'phase2-build/tests/*.cpp' 'source/ClusterForge_Phase2/tests/' -Force
+          & 'phase2-build/patches/fix-common.ps1'
+
+      - name: Build native Windows x64 worker and watchdog
+        shell: pwsh
+        working-directory: source/ClusterForge_Phase2
+        run: |
+          $env:VCPKG_ROOT = 'C:\vcpkg'
+          & "$env:VCPKG_ROOT\vcpkg.exe" install --triplet x64-windows-static --x-manifest-root="$PWD"
+          if ($LASTEXITCODE -ne 0) { throw 'vcpkg install failed.' }
+          cmake -S . -B build/windows -G "Visual Studio 17 2022" -A x64 `
+            -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake `
+            -DVCPKG_TARGET_TRIPLET=x64-windows-static `
+            -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded `
+            -DCLUSTERFORGE_BUILD_TESTS=ON
+          if ($LASTEXITCODE -ne 0) { throw 'CMake configure failed.' }
+          cmake --build build/windows --config Release --parallel
+          if ($LASTEXITCODE -ne 0) { throw 'Windows compilation failed.' }
+          ctest --test-dir build/windows -C Release --output-on-failure
+          if ($LASTEXITCODE -ne 0) { throw 'Windows tests failed.' }
+          if (-not (Test-Path 'build/windows/bin/Release/clusterforge-worker.exe')) { throw 'Worker EXE missing.' }
+          if (-not (Test-Path 'build/windows/bin/Release/clusterforge-watchdog.exe')) { throw 'Watchdog EXE missing.' }
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          choco install innosetup -y --no-progress
+          if ($LASTEXITCODE -ne 0) { throw 'Inno Setup installation failed.' }
+
+      - name: Build classic Windows installer
+        shell: pwsh
+        working-directory: source/ClusterForge_Phase2
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { throw "ISCC.exe not found at $iscc" }
+          & $iscc 'installer/windows/ClusterForgeWorker.iss'
+          if ($LASTEXITCODE -ne 0) { throw 'Installer compilation failed.' }
+          $setup = 'installer/windows/output/ClusterForge-Worker-Setup-x64.exe'
+          if (-not (Test-Path $setup)) { throw 'Installer EXE missing.' }
+
+      - name: Installer smoke test
+        shell: pwsh
+        working-directory: source/ClusterForge_Phase2
+        run: |
+          $setup = Resolve-Path 'installer/windows/output/ClusterForge-Worker-Setup-x64.exe'
+          $info = Get-Item $setup
+          if ($info.Length -lt 100000) { throw 'Installer is unexpectedly small.' }
+          $worker = Get-Item 'build/windows/bin/Release/clusterforge-worker.exe'
+          $watchdog = Get-Item 'build/windows/bin/Release/clusterforge-watchdog.exe'
+          if ($worker.Length -lt 50000 -or $watchdog.Length -lt 20000) { throw 'Compiled binary is unexpectedly small.' }
+
+      - name: Package release and checksums
+        shell: pwsh
+        working-directory: source/ClusterForge_Phase2
+        run: |
+          $out = 'release/windows-x64'
+          New-Item -ItemType Directory -Force $out | Out-Null
+          Copy-Item installer/windows/output/ClusterForge-Worker-Setup-x64.exe $out/
+          Copy-Item build/windows/bin/Release/clusterforge-worker.exe $out/ClusterForgeWorker.exe
+          Copy-Item build/windows/bin/Release/clusterforge-watchdog.exe $out/ClusterForgeWatchdog.exe
+          Copy-Item LICENSE-EULA.txt $out/
+          Get-FileHash "$out/*" -Algorithm SHA256 | ForEach-Object { "$($_.Hash)  $([IO.Path]::GetFileName($_.Path))" } | Set-Content "$out/SHA256.txt"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ClusterForge-Phase2-Windows-x64
+          path: source/ClusterForge_Phase2/release/windows-x64
+          retention-days: 7
